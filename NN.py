@@ -143,7 +143,7 @@ class Model(nn.Module):
     def __init__(self, inp, outp, hidden, hidden_depth, dropout, gamma):
         super(Model, self).__init__()
         self.layers = nn.Sequential(LRP_DropOut(p = 0.0), LRP_Linear(inp, hidden, gamma=gamma), LRP_ReLU())
-        for i in range(hidden_depth-1):
+        for i in range(hidden_depth):
             self.layers.add_module('dropout', LRP_DropOut(p = dropout))
             self.layers.add_module('LRP_Linear' + str(i + 1), LRP_Linear(hidden, hidden, gamma=gamma))
             self.layers.add_module('LRP_ReLU' + str(i + 1), LRP_ReLU())
@@ -151,6 +151,7 @@ class Model(nn.Module):
         self.layers.add_module('dropout', LRP_DropOut(p = dropout))
         self.layers.add_module('LRP_Linear_last', LRP_Linear(hidden, outp, gamma=gamma))
         #self.layers.add_module('dropout', LRP_DropOut(p = dropout)) #new
+
 
     def forward(self, x):
         return self.layers.forward(x)
