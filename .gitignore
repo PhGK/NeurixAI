@@ -4,4 +4,4 @@
 /__pycache__/*
 /plots_statistics/figures/
 /results_with_compound_embedding/*
-
+/results_without_compound_embedding/*

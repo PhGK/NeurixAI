@@ -8,7 +8,7 @@ library(Hmisc)
 library(cowplot)
 library(pROC)
 library(stringr)
-
+library(RColorBrewer)
 #genes that are relevant across drugs? sensitivity genes? essentiality?
 
 
@@ -44,6 +44,7 @@ rel_gene_names <- across_cell_lines %>%
 #find Cobimetinib import features
 cob <- across_cell_lines %>% filter(grepl('MAP',molecular_names), DRUG == 'COBIMETINIB')
 
+churc1 <- across_cell_lines %>% filter(grepl('CHURC', molecular_names), grepl('VIN', DRUG))
 #############################################
 #moa data
 MOA <- fread('../data/secondary-screen-dose-response-curve-parameters.csv') %>%
@@ -118,19 +119,6 @@ most_important10 <- across_cell_lines %>%
   mutate(rel = molecular_names %in% sel_genes) %>%
   mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG))
 
-#for reactome
-#write.csv(most_important %>% filter(DRUG == 'DACOMITINIB') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'IDASANUTLIN') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'POZIOTINIB') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'VINCRISTINE') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'TRAMETINIB') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'TASELISIB') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'UPROSERTIB') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'IBRUTINIB') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'PELITINIB') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'AZD8330') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-#write.csv(most_important %>% filter(DRUG == 'AZD8931') %>%.$molecular_names %>% unique(), './results/data/important_genes.csv', row.names = FALSE, quote=FALSE)
-
 
 most_important_only_red <- most_important %>%
   filter(molecular_names %in% sel_genes)
@@ -182,10 +170,10 @@ difference_plus_moa <- across_cell_lines %>%
   group_by(moa, molecular_names) %>%
   dplyr::summarize(diffv = max(rankl)- min(rankl), maxv = max(pos)) %>%
   arrange(desc(diffv)) %>%
-  filter(maxv > 0.99)
+  filter(maxv > 0.9)
 moas <- difference_plus_moa$moa %>% unique()
 
-number <- 4
+number <- 5
 
 moas[number]
 
@@ -207,11 +195,14 @@ ggplot(diff_data, aes(y = molecular_names, x = meanabsLRP, label = DRUGpos)) +
   xlab('LRP importance') +
   theme(axis.title.y = element_blank(), axis.text = element_text(size=12),
         axis.title.x = element_text(size=14))
-dev.off()5##########
+dev.off()
+
+#########
 # see relationship between expression and LRP
 ##########
 #only selected genes
-selected_genes_dynamics <- dat %>% filter(molecular_names %in% rel_gene_names$molecular_names)
+rel_gene_names_here <- rel_gene_names %>% filter(molecular_names!= 'MAP2K1')
+selected_genes_dynamics <- dat %>% filter(molecular_names %in% rel_gene_names_here$molecular_names) 
 last_name <- selected_genes_dynamics %>% group_by(DRUG, molecular_names) %>%
   dplyr::mutate(smooth = loess(LRP~expression)$fitted) %>%
   filter(expression == max(expression))
@@ -221,18 +212,20 @@ most_important_genes_dynamics <- dat %>% filter(molecular_names %in% most_import
 dynamics_selected_genes <- ggplot(selected_genes_dynamics, aes(x = expression, y = LRP, color=DRUG)) + 
   geom_point(size=0.1) +
   geom_smooth(se=F, linewidth=0.4) +
-  geom_text_repel(data = last_name, aes(x = expression, y =smooth, label = DRUG), size=3, color = 'black', hjust= -0.5, direction = 'y') +
-  facet_wrap(~molecular_names, scales='free') +
+  geom_text_repel(data = last_name, aes(x = expression, y =smooth, label = DRUG), size=4, color = 'black', hjust= -0.5, direction = 'y') +
+  facet_wrap(~molecular_names, scales='free', ncol=2) +
   theme_classic() +
   xlim(c(-2,6)) +
   guides(color = guide_legend(override.aes = list(size = 5))) +
   xlab('Gene expression') +
   ylab('LRP contribution') +
   theme(strip.text = element_text(size=15),
-        axis.text = element_text(size=10),
-        axis.title = element_text(size=13))
+        axis.text = element_text(size=12),
+        axis.title = element_text(size=15), 
+        legend.text = element_text(size=13),
+        legend.title = element_blank())
 
-png('./figures/dynamics_of_LRPcontribution.png', width=4000, height=2500, res=250)
+png('./figures/dynamics_of_LRPcontribution.png', width=4000, height=3200, res=250)
 dynamics_selected_genes
 dev.off()
 
@@ -250,10 +243,16 @@ cell_line_names <- fread('../data/secondary-screen-dose-response-curve-parameter
   filter(!is.na(ORGAN))
 cell_line_names$ccle_name %>% unique() %>% length() 
 
-observe <- dat %>% filter(molecular_names %in% c('MAP2K1', 'MAP2K2', 'BRAF')) %>%
+observemoa  <- dat %>% 
   left_join(cell_line_names) %>%
+  left_join(MOA) %>%   filter(moa == 'MEK inhibitor') %>%
   group_by(ORGAN, molecular_names) %>%
-  dplyr::summarize(meanabsLRP = mean(abs(LRP)))
+  dplyr::summarize(meanabsLRP = (mean(abs(LRP)))) 
+
+observe <- observemoa %>%
+  group_by(ORGAN) %>%
+  mutate(rankl = rank(meanabsLRP)) %>%
+  filter(molecular_names %in% c('MAP2K1', 'MAP2K2', 'BRAF')) 
 
 ggplot(observe, aes(y = ORGAN, x = meanabsLRP)) +
   geom_point() +
@@ -261,8 +260,14 @@ ggplot(observe, aes(y = ORGAN, x = meanabsLRP)) +
 
 ##################
 
-
 most_important10 <- across_cell_lines %>%
+  group_by(DRUG) %>%
+  dplyr::mutate(cutoff = get_nth(meanabsLRP,10), scaled_LRP = meanabsLRP/max(meanabsLRP)) %>%
+  filter(meanabsLRP>=cutoff) %>%
+  mutate(rel = molecular_names %in% sel_genes) %>%
+  mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG))
+
+most_important30 <- across_cell_lines %>%
   group_by(DRUG) %>%
   dplyr::mutate(cutoff = get_nth(meanabsLRP,30), scaled_LRP = meanabsLRP/max(meanabsLRP)) %>%
   filter(meanabsLRP>=cutoff) %>%
@@ -270,24 +275,26 @@ most_important10 <- across_cell_lines %>%
   mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG))
 
 most_important_gene_names10 <- most_important10 %>% ungroup() %>% select(molecular_names) %>% unique()
-write.csv(most_important_gene_names10, '../results/important_genes.csv')
+write.csv(most_important_gene_names10, '../results_with_compound_embedding/important_genes.csv')
 
 library(ComplexHeatmap)
 drug = 'POZIOTINIB'
 
 get_heatmap <- function(drug) {
-  for_heatmap <- dat %>% dplyr::filter(molecular_names %in% most_important_gene_names10$molecular_names, DRUG == drug)
+  for_heatmap <- dat %>% dplyr::filter(molecular_names %in% most_important_gene_names10$molecular_names, DRUG == drug) 
   
   heatmap_frame <- for_heatmap %>% dplyr::select(LRP, molecular_names, cell_line) %>%
-    pivot_wider(names_from = cell_line, values_from = LRP)
+    pivot_wider(names_from = cell_line, values_from = LRP) %>% 
   
   heatmap_matrix <- heatmap_frame[,-1] %>% as.matrix()
   rownames(heatmap_matrix) <- heatmap_frame$molecular_names
-  Heatmap(heatmap_matrix, row_names_gp = grid::gpar(fontsize = 10), show_column_dend=F, show_row_dend=F, column_title = drug, 
+  Heatmap(heatmap_matrix, row_names_gp = grid::gpar(fontsize = 14), show_column_dend=F, show_row_dend=F, column_title = drug, 
           show_column_names=F,show_heatmap_legend =F)
   
   #heatmap_matrix
 }
+
+
 real_ht_list <- get_heatmap('POZIOTINIB')
 draw(real_ht_list)
 #ht_list <- lapply(c('POZIOTINIB',  'DACOMITINIB',  'IBRUTINIB','TRAMETINIB','COBIMETINIB', 'VINCRISTINE', 'IDASANUTLIN', 'UPROSERTIB', 'TASELISIB', 'VOLASERTIB'),get_heatmap)
@@ -300,12 +307,136 @@ some_selected_drugs
 real_ht_list <- ht_list[[1]] +  ht_list[[2]] +  ht_list[[3]] + ht_list[[4]]+ ht_list[[5]] +  ht_list[[6]] +  ht_list[[7]] +ht_list[[8]] +  
   ht_list[[9]] +  ht_list[[10]] +ht_list[[11]] +  ht_list[[12]] +ht_list[[13]] #+ht_list[[14]] +  ht_list[[15]]
 
-png('./figures/heatmaps.png', width=4000, height=4000, res=250)
+png('./figures/heatmaps.png', width=6000, height=5000, res=300)
 draw(real_ht_list)
 dev.off()
 
 
 
+getPalette = colorRampPalette(brewer.pal(11, 'Spectral'))
+
+get_heatmap10_per_drug <- function(drug) {
+  
+  most_important_now <- across_cell_lines %>%
+    filter(DRUG==drug) %>%
+    dplyr::mutate(cutoff = get_nth(meanabsLRP,50), scaled_LRP = meanabsLRP/max(meanabsLRP)) %>%
+    filter(meanabsLRP>=cutoff) %>%
+    mutate(rel = molecular_names %in% sel_genes) %>%
+    mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG))
+  
+  for_heatmap <- dat %>% dplyr::filter(molecular_names %in% most_important_now$molecular_names, DRUG == drug) 
+  
+  
+  heatmap_frame <- for_heatmap %>% dplyr::select(LRP, molecular_names, cell_line) %>%
+    pivot_wider(names_from = cell_line, values_from = LRP)
+  
+  heatmap_matrix <- heatmap_frame[,-1] %>% as.matrix()
+  rownames(heatmap_matrix) <- heatmap_frame$molecular_names
+  
+  dend = as.dendrogram(hclust(dist(heatmap_matrix)))
+  
+  description <- data.frame(cell_line = colnames(heatmap_matrix)) %>% 
+    left_join(cell_line_names) %>%
+    dplyr::select(cell_line,ORGAN) 
+  unique_organs <- cell_line_names$ORGAN %>% unique() %>% sort()
+  colors =  getPalette(length(unique_organs)) #colorRamp2(seq(length(unique_organs), ))
+  #col_fun = colorRamp2(unique_organs, colors)
+  names(colors) = unique_organs
+  ha = HeatmapAnnotation(df = description %>% select(ORGAN), col = list(ORGAN = colors))
+
+  Heatmap(heatmap_matrix, row_names_gp = grid::gpar(fontsize = 14), show_column_dend=F, show_row_dend=T, column_title = drug, 
+          show_column_names=F,show_heatmap_legend =F, row_dend_width = unit(4,'cm'),row_km = 10, bottom_annotation = ha)
+  
+  #heatmap_matrix
+}
+
+for (drug in some_selected_drugs) {
+  png(paste0('./figures/heatmap_', drug, '.png'), width = 2000, height=1400, res=150)
+  draw(get_heatmap10_per_drug(drug))
+  dev.off()
+}
+
+png(paste0('./figures/heatmapscombined.png'), width = 2000, height=2000, res=150)
+#par(mfrow = c(length(some_selected_drugs[1:2]), 2))
+layout(seq(2))
+for (drug in some_selected_drugs[1:2]) {
+  print(drug)
+  draw(get_heatmap10_per_drug(drug))
+}
+dev.off()
+
+
+##########################
+#plot drug resistance in several cell  types against Vincristine and Vinclastine
+##########################
+ABCB1_resistance <- dat %>% filter((molecular_names == 'ABCB1'), grepl('VIN', DRUG)) %>%
+  left_join(cell_line_names)
+
+ABCB1_labels <- ABCB1_resistance %>%
+  group_by(ORGAN, molecular_names) %>%
+  mutate(smooth = loess(LRP~expression, span=0.9)$fitted) %>%
+  filter(expression ==  max(expression))
+
+ggplot(ABCB1_resistance, aes(x = expression, y = LRP, color = ORGAN)) +
+  geom_point(size=1) +
+  #geom_smooth(se=F, linewidth=0.2, span=0.9) +
+  geom_text_repel(aes(x = expression, y = LRP, label=ORGAN)) + 
+  #geom_text_repel(data = ABCB1_labels, aes(x = expression, y = smooth, label=ORGAN)) + 
+  theme_classic() +
+  facet_grid(DRUG~molecular_names, scales='free') +
+  theme_minimal()
+
+png('./figures/VincristineVinblastine_EffectperOrgan.png', width=2000, height=1200, res=150)
+ggplot(ABCB1_resistance %>% filter(!is.na(ORGAN)), aes(y = ORGAN, x = LRP, fill = DRUG)) + geom_boxplot() +
+  theme_minimal() +
+  theme(
+    legend.title = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text= element_text(size=13),
+    axis.title = element_text(size=15),
+    legend.text = element_text(size=13)
+    
+  ) +
+  xlab('LRP score')
+
+dev.off()
+
+###########################################
+#
+#########################################
+##########################
+#plot drug resistance in several cell  types for MYOM3
+##########################
+MYOM3_resistance <- dat %>% filter((molecular_names == 'MYOM3'), grepl('POZIO', DRUG)) %>%
+  left_join(cell_line_names)
+
+MYOM3_labels <- MYOM3_resistance %>%
+  group_by(ORGAN, molecular_names) %>%
+  mutate(smooth = loess(LRP~expression, span=0.9)$fitted) %>%
+  filter(expression ==  max(expression))
+
+ggplot(MYOM3_resistance, aes(x = expression, y = LRP, color = ORGAN)) +
+  geom_point(size=1) +
+  geom_smooth(se=F, linewidth=0.2, span=0.9) +
+  geom_text_repel(aes(x = expression, y = LRP, label=ORGAN)) + 
+  #geom_text_repel(data = ABCB1_labels, aes(x = expression, y = smooth, label=ORGAN)) + 
+  theme_classic() +
+  facet_grid(DRUG~molecular_names, scales='free') +
+  theme_minimal()
+
+#png('./figures/VincristineVinblastine_EffectperOrgan.png', width=2000, height=1200, res=150)
+ggplot(MYOM3_resistance %>% filter(!is.na(ORGAN)), aes(y = ORGAN, x = LRP, fill = DRUG)) + geom_boxplot() +
+  theme_minimal() +
+  theme(
+    legend.title = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text= element_text(size=13),
+    axis.title = element_text(size=15),
+    legend.text = element_text(size=13)
+  ) +
+  xlab('LRP score')
+
+#dev.off()
 #####################################################
 #cell perspective
 ##########################################

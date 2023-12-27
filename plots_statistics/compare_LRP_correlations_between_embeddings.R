@@ -62,24 +62,29 @@ get_corrs <- function(FOLDER) {
   
 }
 
-corr_no_embedding <- get_corrs('results') %>% mutate(type = 'no_embedding') 
+corr_no_embedding <- get_corrs('results_without_compound_embedding') %>% mutate(type = 'no_embedding') 
 ggplot(corr_no_embedding, aes(x = row, y = col, fill = corr, label=round(corr,2))) + geom_tile() + geom_text()
 
 corr_embedding <- get_corrs('results_with_compound_embedding') %>% mutate(type = 'embedding')
 ggplot(corr_no_embedding, aes(x = row, y = col, fill = corr, label=round(corr,2))) + geom_tile() + geom_text()
 
-both_embeddings <- rbind(corr_embedding, corr_no_embedding) %>% mutate(new_type = ifelse(type=='embedding', 'Prior knowledge', 'No prior knowledge'))
+both_embeddings <- rbind(corr_embedding, corr_no_embedding) %>% 
+  mutate(new_type = ifelse(type=='embedding', 'Prior knowledge', 'No prior knowledge')) %>%
+  filter(row != 'OSIMERTINIB', col != 'OSIMERTINIB')
 
 heatmaps <- ggplot(both_embeddings, aes(x = row, y = col, fill = corr, label=round(corr,2))) + 
   geom_tile(show.legend=F) + 
-  geom_text(data = both_embeddings %>% filter(corr!=1)) +
-  facet_wrap(~new_type) +
+  geom_text(data = both_embeddings %>% filter(corr!=1), aes(x = row, y = col, color = corr>0.7, label=round(corr,2)), show.legend = F) +
+  facet_wrap(~new_type, ncol=1) +
+  scale_color_manual(values = c('white', 'black')) + 
   theme(axis.text.x = element_text(angle=90, size=13), 
         axis.text.y = element_text(size=13),  
         strip.text = element_text(size=13),
         axis.title = element_blank()) 
 
+png('./figures/LRP_prior_vs_noprior.png', width=2000, height=3000, res=250)
 heatmaps
+dev.off()
 
 both_embeddings_wide <- both_embeddings %>%
   dplyr::select(-type) %>%
@@ -95,19 +100,19 @@ comps <- ggplot(both_embeddings_wide, aes(x = `Prior knowledge`, y = `No prior k
         strip.text = element_text(size=13),
         axis.title = element_text(size=13), ) 
 
-png('./figures/compare2noembedding.png', width=3000, height=2000, res=200)
-plot_grid(heatmaps, NULL, comps, labels=c('A', 'B', ''), rel_heights = c(10,0.5,4), ncol=1)
+png('./figures/compare2noembedding.png', width=3000, height=3000, res=230)
+plot_grid(heatmaps, NULL, comps, labels=c('A', 'B', ''), rel_heights = c(10,0.5,3), ncol=1)
 dev.off()
 
 ############################################
 ####compare LRP scores directly
-important_genes <- read.csv('../results/important_genes.csv')$molecular_names
+important_genes <- read.csv('../results_with_compound_embedding/important_genes.csv')$molecular_names
 
 get_corrs_overall <- function() {
-  no_embed_ <- read_dat('results') %>% mutate(no_embed = LRP) %>% select(DRUG, cell_line, molecular_names, no_embed) %>% 
-    filter(molecular_names %in% important_genes)
+  no_embed_ <- read_dat('results_without_compound_embedding') %>% mutate(no_embed = LRP) %>% select(DRUG, cell_line, molecular_names, no_embed) %>% 
+    filter(molecular_names %in% important_genes) %>% filter(DRUG!='OSIMERTINIB')
   embed_ <- read_dat('results_with_compound_embedding') %>% mutate(embed =LRP)  %>% select(DRUG, cell_line, molecular_names, embed) %>%
-    filter(molecular_names %in% important_genes)
+    filter(molecular_names %in% important_genes) %>% filter(DRUG!='OSIMERTINIB')
   
   combined <- inner_join(embed_, no_embed_)
   l <- list()
