@@ -11,42 +11,45 @@ library(stringr)
 library(RColorBrewer)
 library(netresponse)
 library(igraph)
+library(ComplexHeatmap)
 #genes that are relevant across drugs? sensitivity genes? essentiality?
 
 
 
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-#some_dat <- fread('../data/secondary-screen-dose-response-curve-parameters.csv') %>%
-#  select(depmap_id, ccle_name) %>% unique()
 
 read_dat <- function() {
-  files <- list.files(paste0('../results_with_compound_embedding/LRP/'))
+  files <- list.files(paste0('../results/LRP/'))
   print(files)
-  d <- rbindlist(lapply(files, function(f) fread(paste0('../results_with_compound_embedding/LRP/', f))[,-1] %>% unique()))
+  d <- rbindlist(lapply(files, function(f) fread(paste0('../results/LRP/', f))[,-1] %>% unique()))
   #d <- rbindlist(lapply(files, function(f) fread(paste0('../results/LRP/', f))[,-1] ))
   d
 }
 
-dat <- read_dat() %>%
-  filter(DRUG!= 'SELUMETINIB')
+dat <- read_dat() 
 
 get_slope <- function(y,x) {
   model <- lm(y~x)$coef[2]
   model
 }
 
-
 across_cell_lines <- dat %>%group_by(molecular_names, DRUG) %>%
-  dplyr::summarize(meanabsLRP = mean(abs(LRP)), slope = cor(LRP, expression)) %>%
-  #dplyr::summarize(slope = cor(LRP, expression)) %>% mutate(meanabsLRP =abs(slope)) %>%
+  group_by(molecular_names) %>%
+  dplyr::mutate(maxexpr = max(abs(expression))) %>%
+  filter(maxexpr<10) %>% # filter genes with outliers on test set
+  group_by(molecular_names, DRUG) %>%
+  dplyr::summarize(meanabsLRP = mean(abs(LRP)), slope = cor(LRP, expression), ncells = n(), maxexpr = max(expression)) %>%
+  #dplyr::summarize(meanabsLRP = mean(abs(LRP)), ncells = n()) %>%
   group_by(DRUG) %>%
   mutate(rankl = rank((meanabsLRP))) %>%
   mutate(pos = rankl/max(rankl)) %>%
   mutate(percent_rank = pos * 100)
 
+dat <- dat %>% filter(molecular_names %in% (across_cell_lines$molecular_names %>% unique()))
+
 genes <- data.frame(gene = dat$molecular_names %>% unique())
 
-sel_genes <-  c('ERBB2', 'EGFR', 'MDM2', 'ABCB1', 'MAP2K1','MAP2K6', 'MAP3K21')
+sel_genes <-  c('ERBB2', 'EGFR', 'MDM2', 'ABCB1', 'MAP2K1','MAP2K6', 'MAP3K21', 'TUSC3')
 
 rel_gene_names <- across_cell_lines %>%
   filter(molecular_names %in% sel_genes)
@@ -60,6 +63,7 @@ cob <- across_cell_lines %>% filter(grepl('MAP',molecular_names), DRUG == 'COBIM
 
 churc1 <- across_cell_lines %>% filter(grepl('CHURC', molecular_names), grepl('VIN', DRUG))
 #############################################
+
 #moa data
 MOA <- fread('../data/secondary-screen-dose-response-curve-parameters.csv') %>%
   select(name, moa, target) %>%
@@ -84,7 +88,7 @@ high_relevantometer_data <- relevantometer_data %>% filter(pos > 0.9)
 low_relevantometer_data <- relevantometer_data %>% filter(pos <= 0.9)
 
 #################for manuscript##################################################
-read_percent_rank <- relevantometer_data %>% filter(molecular_names == 'ABCB1')  
+read_percent_rank <- relevantometer_data %>% filter(molecular_names == 'MAP3K21')  
 #################################################################################
 
 line_data <- relevantometer_data %>% cross_join(data.frame(x=c(0,1)))
@@ -99,13 +103,14 @@ relevantometer <- ggplot(relevantometer_data, aes(y = DRUG, x = pos, label = mol
   theme_minimal() +
   theme(#panel.grid.major.y = element_blank(),
         panel.grid.minor = element_blank(),
-        axis.title = element_blank(),
+        axis.title.y = element_blank(),
         axis.text.y = element_text(size=15),
         axis.text.x = element_text(size=15),
         legend.title = element_blank(),
         legend.text = element_text(size=15),
         legend.position = 'bottom') +
   #ylab('Low importance rank     \U2194     High importance rank')  +
+  xlab('xAI-assigned importance rank')+ 
   scale_y_discrete(limits=rev) +
   scale_x_continuous(labels=scales::percent, limits=c(0.0,1.0)) +
   coord_cartesian(xlim =c(0.0,1.0))
@@ -170,13 +175,16 @@ most_important_genes_plot_rank
 dev.off()
 
 
-#############################
-#negative and positive contributions per drug
-slopes <- (across_cell_lines) %>% group_by(DRUG) %>%
-  filter(meanabsLRP > quantile(meanabsLRP,0.99)) %>%
-  dplyr::summarize(mean_slope = mean(slope), mean_positive = mean(slope>=0))
-  
-ggplot(slopes, aes(y = DRUG, x = mean_slope)) + geom_boxplot()
+##########################
+#groups_of_important genes across drugs
+#########################
+
+group_importance <- most_important10 %>%
+  left_join(MOA) %>%
+  #filter((moa == 'EGFR inhibitor') | (DRUG == 'IBRUTINIB')) %>%
+  filter(moa == 'MEK inhibitor') %>%
+  group_by(molecular_names) %>%
+  dplyr::summarize(N=n())
 
 #############################
 ##################################################################################
@@ -191,8 +199,6 @@ write.csv(most_important10$molecular_names %>% unique(),'figures/reactome_genes1
 ######
 #make networks
 #####
-all_network_genes <- read.csv('../data/10genes.sif', sep='\t', header=F)[,c(1,3)] %>%
-  filter((V1 %in% most_important10$molecular_names) | (V3 %in% most_important10$molecular_names))
 
 all_network_genes <- read.csv('../data/string_interactions_short.tsv',sep='\t')[,c(1,2)]
 colnames(all_network_genes) <- c('V1', 'V3')
@@ -212,7 +218,7 @@ V(g)$vertexcolor = 'gray60'
 E(g)$weight <- 0.01
 
 #l <- layout_with_lgl(g)
-set.seed(0)
+set.seed(1)
 l <- layout_nicely(g)
 #l <- layout_with_fr(g)
 #l <- layout_with_lgl(g)
@@ -251,7 +257,7 @@ dev.off()
 ######
 #make networks individually
 #####
-all_network_genes <- read.csv('../data/10genes.sif', sep='\t', header=F)[,c(1,3)] #%>%
+#all_network_genes <- read.csv('../data/10genes.sif', sep='\t', header=F)[,c(1,3)] #%>%
 #filter((V1 %in% most_important10$molecular_names) | (V3 %in% most_important10$molecular_names))
 
 most_important10 <- most_important10 %>% dplyr::select(molecular_names, meanabsLRP, DRUG, slope) %>%
@@ -328,12 +334,12 @@ difference_plus_moa <- across_cell_lines %>%
   inner_join(MOA) %>%
   mutate(moa = ifelse((DRUG=='VINCRISTINE')| (DRUG == 'VINBLASTINE'), 'CHEMO', moa)) %>%
   group_by(moa, molecular_names) %>%
-  dplyr::summarize(diffv = max(rankl)- min(rankl), maxv = max(pos)) %>%
+  dplyr::summarize(diffv = max(rankl)- min(rankl), maxv = max(pos), ncells = mean(ncells)) %>%
   arrange(desc(diffv)) %>%
   filter(maxv > 0.9)
 moas <- difference_plus_moa$moa %>% unique()
 
-number <- 3
+number <- 2
 
 moas[number]
 
@@ -349,12 +355,13 @@ ggplot(diff_data, aes(y = molecular_names, x = pos, label = DRUGpos)) +
   geom_text()
 
 png(paste0('./figures/DiffScores', moas[number], '.png'), width=2000, height=1000, res=150)
-ggplot(diff_data, aes(y = molecular_names, x = meanabsLRP, label = DRUGpos)) +
+ggplot(diff_data, aes(y = molecular_names, x = percent_rank/100, label = DRUG)) +
   geom_point(size=0.5)+
-  geom_text_repel() +
-  xlab('LRP importance') +
+  geom_text_repel(direction = 'y') +
+  xlab('Importance percentile rank') +
   theme(axis.title.y = element_blank(), axis.text = element_text(size=12),
-        axis.title.x = element_text(size=14))
+        axis.title.x = element_text(size=14)) +
+  scale_x_continuous(labels = scales::percent)
 dev.off()
 
 #########
@@ -459,7 +466,7 @@ most_important30 <- across_cell_lines %>%
   mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG))
 
 most_important_gene_names10 <- most_important10 %>% ungroup() %>% select(molecular_names) %>% unique()
-write.csv(most_important_gene_names10, '../results_with_compound_embedding/important_genes.csv')
+write.csv(most_important_gene_names10, '../results/important_genes.csv')
 
 library(ComplexHeatmap)
 drug = 'POZIOTINIB'
@@ -468,7 +475,7 @@ get_heatmap <- function(drug) {
   for_heatmap <- dat %>% dplyr::filter(molecular_names %in% most_important_gene_names10$molecular_names, DRUG == drug) 
   
   heatmap_frame <- for_heatmap %>% dplyr::select(LRP, molecular_names, cell_line) %>%
-    pivot_wider(names_from = cell_line, values_from = LRP) %>% 
+    pivot_wider(names_from = cell_line, values_from = LRP) 
   
   heatmap_matrix <- heatmap_frame[,-1] %>% as.matrix()
   rownames(heatmap_matrix) <- heatmap_frame$molecular_names
@@ -485,11 +492,11 @@ draw(real_ht_list)
 some_selected_drugs <- order_by_moa$DRUG
 
 ht_list <- lapply(some_selected_drugs,get_heatmap)
-some_selected_drugs
+some_selected_drugs %>% length()
 
 
 real_ht_list <- ht_list[[1]] +  ht_list[[2]] +  ht_list[[3]] + ht_list[[4]]+ ht_list[[5]] +  ht_list[[6]] +  ht_list[[7]] +ht_list[[8]] +  
-  ht_list[[9]] +  ht_list[[10]] +ht_list[[11]] +  ht_list[[12]] +ht_list[[13]] #+ht_list[[14]] +  ht_list[[15]]
+  ht_list[[9]] +  ht_list[[10]] +ht_list[[11]] +  ht_list[[12]] #+ht_list[[13]] #+ht_list[[14]] +  ht_list[[15]]
 
 png('./figures/heatmaps.png', width=6000, height=5000, res=300)
 draw(real_ht_list)
@@ -561,7 +568,8 @@ dasatinib_genes <- across_cell_lines %>%
 
 dasatinib_data <- dat %>% dplyr::filter(molecular_names %in% dasatinib_genes$molecular_names, DRUG == 'DASATINIB')  %>%
   left_join(cell_line_names) %>%
-  filter(molecular_names %in% c('EFHB', 'TRABD2B', 'KAAG1', 'BCO1', 'HNF1B', 'HAVCR1', 'KCNJ16', 'HOGA1', 'LRRN4'))
+  filter(molecular_names %in% c('BCO1', 'HNF1B', 'HAVCR1', 'PDZK1IP1'))
+dasatinib_data$molecular_names %>% unique()
 
 mean_dasatinib_data <- dasatinib_data %>% group_by(cell_line, ORGAN) %>%
   dplyr::summarize(LRP = mean(LRP))
@@ -571,6 +579,7 @@ kidney_LRP<- mean_dasatinib_data %>% filter(ORGAN == 'KIDNEY')
 no_kidney_LRP<- mean_dasatinib_data %>% filter(ORGAN != 'KIDNEY')
 wilcox.test(kidney_LRP$LRP, no_kidney_LRP$LRP)
 mean(no_kidney_LRP$LRP)
+mean(kidney_LRP$LRP)
 
 ##########################
 #plot drug resistance in several cell  types against Vincristine and Vinclastine

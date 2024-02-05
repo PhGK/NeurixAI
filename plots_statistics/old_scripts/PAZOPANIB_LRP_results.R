@@ -14,15 +14,12 @@ library(igraph)
 #genes that are relevant across drugs? sensitivity genes? essentiality?
 
 
-
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-#some_dat <- fread('../data/secondary-screen-dose-response-curve-parameters.csv') %>%
-#  select(depmap_id, ccle_name) %>% unique()
 
 read_dat <- function() {
-  files <- list.files(paste0('../results_with_compound_embedding/LRP/'))
+  files <- list.files(paste0('../results/LRP/'))
   print(files)
-  d <- rbindlist(lapply(files, function(f) fread(paste0('../results_with_compound_embedding/LRP/', f))[,-1] %>% unique()))
+  d <- rbindlist(lapply(files, function(f) fread(paste0('../results/LRP/', f))[,-1] %>% unique()))
   #d <- rbindlist(lapply(files, function(f) fread(paste0('../results/LRP/', f))[,-1] ))
   d
 }
@@ -35,10 +32,8 @@ get_slope <- function(y,x) {
   model
 }
 
-
 across_cell_lines <- dat %>%group_by(molecular_names, DRUG) %>%
-  dplyr::summarize(meanabsLRP = mean(abs(LRP)), slope = cor(LRP, expression)) %>%
-  #dplyr::summarize(slope = cor(LRP, expression)) %>% mutate(meanabsLRP =abs(slope)) %>%
+  dplyr::summarize(meanabsLRP = mean(abs(LRP))) %>%
   group_by(DRUG) %>%
   mutate(rankl = rank((meanabsLRP))) %>%
   mutate(pos = rankl/max(rankl)) %>%
@@ -46,20 +41,11 @@ across_cell_lines <- dat %>%group_by(molecular_names, DRUG) %>%
 
 genes <- data.frame(gene = dat$molecular_names %>% unique())
 
-sel_genes <-  c('ERBB2', 'EGFR', 'MDM2', 'ABCB1', 'MAP2K1','MAP2K6', 'MAP3K21')
+sel_genes <-  c('NTRK3', 'IGF1R', 'KDR')
 
 rel_gene_names <- across_cell_lines %>%
   filter(molecular_names %in% sel_genes)
 
-
-
-
-#############################################
-#find Cobimetinib import features
-cob <- across_cell_lines %>% filter(grepl('MAP',molecular_names), DRUG == 'COBIMETINIB')
-
-churc1 <- across_cell_lines %>% filter(grepl('CHURC', molecular_names), grepl('VIN', DRUG))
-#############################################
 #moa data
 MOA <- fread('../data/secondary-screen-dose-response-curve-parameters.csv') %>%
   select(name, moa, target) %>%
@@ -140,20 +126,18 @@ most_important_without_red <- most_important %>%
   filter(!(molecular_names %in% sel_genes))
 
 most_important_genes_plot_rank <- ggplot(most_important, aes(x = DRUG, y = scaled_LRP, label = molecular_names)) + 
-  #geom_line(data = line_data, aes(x = DRUG, y= x, color=moa), linewidth=1) +
-  geom_line(data = line_data, aes(x = DRUG, y= x, color=moa), linewidth=2, arrow = arrow(length=unit(1,"cm"), type = 'closed')) +
-  
-  geom_text_repel(data = most_important_without_red, show.legend=F, size=6, color='black', max.overlaps=1000) +
-  geom_label_repel(data = most_important_only_red, show.legend=F, size=6, color='red', max.overlaps = 1000) +
-  geom_point(data=most_important_without_red, aes(x = DRUG, y = scaled_LRP),color='black', size=4.0) +
+  geom_line(data = line_data, aes(x = DRUG, y= x, color=moa), linewidth=1) +
+  geom_text_repel(data = most_important_without_red, show.legend=F, size=4, color='black', max.overlaps=100) +
+  geom_text_repel(data = most_important_only_red, show.legend=F, size=4, color='red', max.overlaps = 1000) +
+  geom_point(data=most_important_without_red, aes(x = DRUG, y = scaled_LRP),color='black', size=0.2) +
   geom_point(data=most_important_only_red, aes(x = DRUG, y = scaled_LRP),color='red') +
   theme_minimal() +
   scale_y_continuous(trans='log10') +
-  theme(axis.text = element_text(size=20),
+  theme(axis.text = element_text(size=15),
         axis.title.y = element_blank(),
-        axis.title.x = element_text(size=30),
+        axis.title.x = element_text(size=20),
         legend.title = element_blank(),
-        legend.text = element_text(size=20),
+        legend.text = element_text(size=15),
         legend.position = 'bottom') +
   ylab('xAI-assigned Importance') +
   coord_flip() + 
@@ -165,37 +149,22 @@ png('./figures/important_genes.png', width=3000, height=1500, res=200)
 relevantometer
 dev.off()
 
-png('./figures/important_genes_scaled.png', width=3200, height=4000, res=150)
+png('./figures/important_genes_scaled.png', width=3000, height=2200, res=150)
 most_important_genes_plot_rank
 dev.off()
 
-
-#############################
-#negative and positive contributions per drug
-slopes <- (across_cell_lines) %>% group_by(DRUG) %>%
-  filter(meanabsLRP > quantile(meanabsLRP,0.99)) %>%
-  dplyr::summarize(mean_slope = mean(slope), mean_positive = mean(slope>=0))
-  
-ggplot(slopes, aes(y = DRUG, x = mean_slope)) + geom_boxplot()
-
-#############################
-##################################################################################
 ###############
 #save important genes for reactome
 ##############
 reactome_genes <- most_important$molecular_names %>% unique()
 write.csv(reactome_genes,'figures/reactome_genes.csv', row.names=F)
 write.csv(most_important10$molecular_names %>% unique(),'figures/reactome_genes10.csv', row.names=F)
-
-
 ######
 #make networks
 #####
-all_network_genes <- read.csv('../data/10genes.sif', sep='\t', header=F)[,c(1,3)] %>%
-  filter((V1 %in% most_important10$molecular_names) | (V3 %in% most_important10$molecular_names))
+all_network_genes <- read.csv('../data/10genes.sif', sep='\t', header=F)[,c(1,3)] #%>%
+  #filter((V1 %in% most_important10$molecular_names) | (V3 %in% most_important10$molecular_names))
 
-all_network_genes <- read.csv('../data/string_interactions_short.tsv',sep='\t')[,c(1,2)]
-colnames(all_network_genes) <- c('V1', 'V3')
 vertices_not_in_graph <- most_important10$molecular_names[!(most_important10$molecular_names %in% all_network_genes$V1) & 
                                                           !(most_important10$molecular_names %in% all_network_genes$V3)] %>% unique()
 
@@ -209,13 +178,12 @@ g <- g + vertices(vertices_not_in_graph)
 V(g)$name
 V(g)$vertexsize <- 5
 V(g)$vertexcolor = 'gray60'
-E(g)$weight <- 0.01
+E(g)$weight <- 0.1
 
 #l <- layout_with_lgl(g)
 set.seed(0)
 l <- layout_nicely(g)
-#l <- layout_with_fr(g)
-#l <- layout_with_lgl(g)
+
 png('./figures/networks_reactome.png', width = 3000, height=3500, res=150)
 par(mfrow=c(4,3), mar=c(0,0,2,0))
 for (current_drug in order_by_moa$DRUG){
@@ -356,7 +324,6 @@ ggplot(diff_data, aes(y = molecular_names, x = meanabsLRP, label = DRUGpos)) +
   theme(axis.title.y = element_blank(), axis.text = element_text(size=12),
         axis.title.x = element_text(size=14))
 dev.off()
-
 #########
 # see relationship between expression and LRP
 ##########
@@ -368,49 +335,25 @@ last_name <- selected_genes_dynamics %>% group_by(DRUG, molecular_names) %>%
   filter(expression == max(expression))
 
 most_important_genes_dynamics <- dat %>% filter(molecular_names %in% most_important$molecular_names)
- 
-resistance <- data.frame('resistance' = c('higher resistance', 'higher_sensitivity'), y = c(1,-1)) 
-arrows <- selected_genes_dynamics %>% 
-  group_by(molecular_names, DRUG) %>%
-  dplyr::summarize(x_coord = min(expression)-1, DRUG=first(DRUG)) %>%
-  dplyr::select(x_coord, molecular_names, DRUG) %>%
-  unique() %>%
-  cross_join(resistance)
-
-dynamics_selected_genes <- ggplot(selected_genes_dynamics, aes(x = expression, y = LRP, color=DRUG)) + 
-  geom_point(size=0.1) +
-  geom_smooth(se=F, linewidth=0.4) +
-  geom_text_repel(data = last_name, aes(x = expression, y =smooth, label = DRUG), size=4, color = 'black', hjust= -0.5, direction = 'y') +
-  facet_wrap(~molecular_names, scales='free', ncol=2, dir='v') +
+  
+dynamics_selected_genes <- ggplot(selected_genes_dynamics, aes(x = expression, y = LRP, color=molecular_names)) + 
+  geom_point(size=0.5, show.legend=F) +
+  geom_smooth(se=F, linewidth=0.4, show.legend=F) +
+  geom_text_repel(data = last_name, aes(x = expression, y =smooth, label = molecular_names), size=4, color = 'black', hjust= -0.5, direction = 'y') +
+  #facet_wrap(~molecular_names, scales='free', ncol=2, dir='v') +
   theme_classic() +
+  xlim(c(-4,15)) +
   guides(color = guide_legend(override.aes = list(size = 5))) +
-    xlab('Gene expression') +
+  xlab('Gene expression') +
   ylab('LRP contribution') +
-  xlim(c(-2,6)) +
   theme(strip.text = element_text(size=15),
         axis.text = element_text(size=12),
-        axis.title = element_text(size=20), 
+        axis.title = element_text(size=15), 
         legend.text = element_text(size=13),
-        legend.title = element_blank(),
-        legend.position = 'bottom')
+        legend.title = element_blank())
+
+png('./figures/dynamics_of_LRPcontribution_PAZOPANIB.png', width=4000, height=3200, res=250)
 dynamics_selected_genes
-
-
-png('./figures/dynamics_of_LRPcontribution.png', width=4000, height=4500, res=300)
-dynamics_selected_genes
-dev.off()
-
-
-arrow <- ggplot() + geom_line(aes(x = c(0,0), y = c(0.1,1)), linewidth=2, arrow=arrow(length=unit(0.3,"cm"), type = 'closed'), color = 'red') +
-  geom_line(aes(x = c(0,0), y = c(-0.1,-1)), linewidth=2, arrow=arrow(length=unit(0.3,"cm"), type = 'closed'), color = 'darkgreen') +
-  geom_text(aes(x = 0, y = 1.2, label = 'Resistance'),size=6)+ 
-  geom_text(aes(x = 0, y = -1.2, label = 'Sensitivity'), size=6) +
-
-  theme_void()
-arrow_plot <- plot_grid(NULL, arrow, NULL, ncol=1, rel_heights = c(0.8,1,0.95) )
-  
-png('./figures/dynamics_of_LRPcontribution_with_arrow.png', width=4000, height=4500, res=300)
-plot_grid(dynamics_selected_genes, arrow_plot, rel_widths = c(100,10))
 dev.off()
 
 ##########
@@ -549,28 +492,6 @@ for (drug in some_selected_drugs[1:2]) {
 }
 dev.off()
 
-##########################
-#show cell lines for which gene group contributes strongly for drug sensitivity
-##########################
-dasatinib_genes <- across_cell_lines %>%
-  filter(DRUG=='DASATINIB') %>%
-  dplyr::mutate(cutoff = get_nth(meanabsLRP,50), scaled_LRP = meanabsLRP/max(meanabsLRP)) %>%
-  filter(meanabsLRP>=cutoff) %>%
-  mutate(rel = molecular_names %in% sel_genes) %>%
-  mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG))
-
-dasatinib_data <- dat %>% dplyr::filter(molecular_names %in% dasatinib_genes$molecular_names, DRUG == 'DASATINIB')  %>%
-  left_join(cell_line_names) %>%
-  filter(molecular_names %in% c('EFHB', 'TRABD2B', 'KAAG1', 'BCO1', 'HNF1B', 'HAVCR1', 'KCNJ16', 'HOGA1', 'LRRN4'))
-
-mean_dasatinib_data <- dasatinib_data %>% group_by(cell_line, ORGAN) %>%
-  dplyr::summarize(LRP = mean(LRP))
-
-ggplot(mean_dasatinib_data, aes(x = LRP, y = ORGAN, fill = ORGAN)) + geom_boxplot() 
-kidney_LRP<- mean_dasatinib_data %>% filter(ORGAN == 'KIDNEY')
-no_kidney_LRP<- mean_dasatinib_data %>% filter(ORGAN != 'KIDNEY')
-wilcox.test(kidney_LRP$LRP, no_kidney_LRP$LRP)
-mean(no_kidney_LRP$LRP)
 
 ##########################
 #plot drug resistance in several cell  types against Vincristine and Vinclastine

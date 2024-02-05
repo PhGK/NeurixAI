@@ -65,7 +65,7 @@ get_corrs <- function(FOLDER) {
 corr_no_embedding <- get_corrs('results_without_compound_embedding') %>% mutate(type = 'no_embedding') 
 ggplot(corr_no_embedding, aes(x = row, y = col, fill = corr, label=round(corr,2))) + geom_tile() + geom_text()
 
-corr_embedding <- get_corrs('results_with_compound_embedding') %>% mutate(type = 'embedding')
+corr_embedding <- get_corrs('results') %>% mutate(type = 'embedding')
 ggplot(corr_no_embedding, aes(x = row, y = col, fill = corr, label=round(corr,2))) + geom_tile() + geom_text()
 
 both_embeddings <- rbind(corr_embedding, corr_no_embedding) %>% 
@@ -106,26 +106,49 @@ dev.off()
 
 ############################################
 ####compare LRP scores directly
-important_genes <- read.csv('../results_with_compound_embedding/important_genes.csv')$molecular_names
+#important_genes <- read.csv('../results_with_compound_embedding/important_genes.csv')$molecular_names
+
+important_genes_data <-   embed_ <- read_dat('results') %>%  
+  #filter(molecular_names %in% important_genes) %>% 
+  filter(!(DRUG %in% c('OSIMERTINIB', 'SELUMETINIB'))) %>%
+  group_by(molecular_names, DRUG) %>%
+  dplyr::summarize(meanabsLRP = mean(abs(LRP)), max_value = max(abs(expression))) %>%
+  group_by(molecular_names) %>%
+  dplyr::mutate(max_value = max(max_value)) %>%
+  filter(max_value<10)
+
+get_important_genes <- function(q) {
+  important_genes_data %>%
+    ungroup() %>%
+    filter(meanabsLRP >= quantile(meanabsLRP, q)) %>%
+    .$molecular_names
+}
 
 get_corrs_overall <- function() {
   no_embed_ <- read_dat('results_without_compound_embedding') %>% mutate(no_embed = LRP) %>% select(DRUG, cell_line, molecular_names, no_embed) %>% 
-    filter(molecular_names %in% important_genes) %>% filter(DRUG!='OSIMERTINIB')
-  embed_ <- read_dat('results_with_compound_embedding') %>% mutate(embed =LRP)  %>% select(DRUG, cell_line, molecular_names, embed) %>%
-    filter(molecular_names %in% important_genes) %>% filter(DRUG!='OSIMERTINIB')
+    #filter(molecular_names %in% important_genes) %>% 
+    filter(!(DRUG %in% c('OSIMERTINIB', 'SELUMETINIB')))
+  embed_ <- read_dat('results') %>% mutate(embed =LRP)  %>% select(DRUG, cell_line, molecular_names, embed) %>%
+    #filter(molecular_names %in% important_genes) %>% 
+    filter(!(DRUG %in% c('OSIMERTINIB', 'SELUMETINIB')))
   
   combined <- inner_join(embed_, no_embed_)
   l <- list()
-  cuts <- c(0,0.9,0.99, 0.999, 0.999999)
+  cuts <- c(0,0.9,0.99, 0.999, 0.9999, 0.99999)
   for (i in seq(5)){
-   q_emb = quantile(abs(embed_$embed), cuts[i], na.rm=T) %>% as.numeric()
-   q_noemb = quantile(abs(no_embed_$no_embed), cuts[i], na.rm=T) %>% as.numeric()
-   q_min = min(q_emb, q_noemb)
+    print(i)
+   #q_emb = quantile(abs(embed_$embed), cuts[i], na.rm=T) %>% as.numeric()
+   #q_noemb = quantile(abs(no_embed_$no_embed), cuts[i], na.rm=T) %>% as.numeric()
+   #q_min = min(q_emb, q_noemb)
+   #dim_filtered_embed <- embed_ %>% filter(abs(embed)>=q_emb) %>% dim() %>% .[1]
    
     combined_quantiled <- combined %>%
-      filter(abs(embed)>=q_min, no_embed>=q_min)
+      #filter(abs(embed)>=q_min, abs(no_embed)>=q_min)
+      filter(molecular_names %in% get_important_genes(cuts[i]))
     
-    l[[i]] <- data.frame('corr' = cor(combined_quantiled$no_embed, combined_quantiled$embed), 'quantile' = cuts[i], nsamples = dim(combined_quantiled)[1])
+    
+    
+    l[[i]] <- data.frame('corr' = cor(combined_quantiled$no_embed, combined_quantiled$embed, method = 'pearson'), 'quantile' = cuts[i], nsamples = dim(combined_quantiled)[1])
   }
   gc()
   rbindlist(l)
@@ -134,3 +157,6 @@ gc()
 corrs_overall <- get_corrs_overall()
 #############################################
 
+embed_test <- read_dat('results_with_compound_embedding') %>% mutate(embed =LRP)  %>% select(DRUG, cell_line, molecular_names, embed) %>%
+  filter(molecular_names %in% important_genes) %>% filter(DRUG!='OSIMERTINIB')
+embed_test$DRUG %>% unique()

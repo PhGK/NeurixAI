@@ -21,24 +21,24 @@ def train_test(model, ds, lr, nepochs, fold, device, PATH = './results/training/
 
     model.train().to(device)
 
-    optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr = 0.05, weight_decay=1e-5)
-    optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr = 0.05, weight_decay=1e-5)
+    optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr = lr, weight_decay=1e-5)
+    optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr = lr, weight_decay=1e-5)
     criterion = nn.HuberLoss() #nn.L1Loss() #MSELoss()
 
     
-    scheduler1 = ExponentialLR(optimizer1, gamma=0.9) #gamma 0.8
-    scheduler2 = ExponentialLR(optimizer2, gamma=0.9) #gamma 0.8
+    scheduler1 = ExponentialLR(optimizer1, gamma=0.9) #gamma 0.9 #0.95 only for 100 epochs
+    scheduler2 = ExponentialLR(optimizer2, gamma=0.9) #gamma 0.9
 
 
     ds.change_fold(fold, 'train')
-    for epoch in (range(nepochs)):
+    for epoch in range(1,nepochs+1): #been without +1
 
         
 
         
-        bs = 128 #min(int(16*1.5**epoch), 512)
+        bs = 128
         
-        dl = DataLoader(ds, batch_size = bs, shuffle=True, num_workers=8, pin_memory=True) #batch size 64
+        dl = DataLoader(ds, batch_size = bs, shuffle=True, num_workers=8, pin_memory=True)
 
 
         it = 0

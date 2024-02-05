@@ -12,16 +12,16 @@ library(DescTools)
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 read_dat_no_embedding <- function() {
-  files <- list.files(paste0('../results/training/'))
+  files <- list.files(paste0('../results_without_compound_embedding//training/'))
   print(files)
-  d <- rbindlist(lapply(files, function(f) fread(paste0('../results/training/', f))))
+  d <- rbindlist(lapply(files, function(f) fread(paste0('../results_without_compound_embedding//training/', f))))
   d %>% mutate('embedding' = F)
 }
 
 read_dat_embedding <- function() {
-  files <- list.files(paste0('../results_with_compound_embedding//training/'))
+  files <- list.files(paste0('../results/training/'))
   print(files)
-  d <- rbindlist(lapply(files, function(f) fread(paste0('../results_with_compound_embedding/training/', f))))
+  d <- rbindlist(lapply(files, function(f) fread(paste0('../results/training/', f))))
   d %>% mutate('embedding' = T) 
   
 }
@@ -38,7 +38,8 @@ dat_embedding <- read_dat_embedding() %>%
 
 
 #dat <- inner_join(dat_no_embedding, dat_embedding, by = c('drugs', 'cells', 'fold', 'epoch'))
-dat <- rbind(dat_no_embedding, dat_embedding)
+dat <- rbind(dat_no_embedding, dat_embedding) %>%
+  mutate(fold = fold+1)
 
 meth <- 'spearman'
 

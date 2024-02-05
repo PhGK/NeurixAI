@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, RobustScaler
 import os
-
+import settings as s
 
 class MyDataSet(Dataset):
     def __init__(self, nsplits):
@@ -32,9 +32,12 @@ class MyDataSet(Dataset):
 
         self.cell_ids_test_lists, self.cell_lines_test_lists = self.generate_train_and_test_ids(self.molecular_data.index) 
         
-
-        #self.ndrug_features = self.drug_embeddings.shape[0] + self.drug_fingerprints.shape[0]   + self.unique_drugs.shape[0]
-        self.ndrug_features = self.drug_fingerprints.shape[0]   + self.unique_drugs.shape[0]
+        if s.with_compound:
+            self.ndrug_features = self.drug_embeddings.shape[0] + self.drug_fingerprints.shape[0]   + self.unique_drugs.shape[0]
+        else:
+            self.ndrug_features = self.drug_fingerprints.shape[0]   + self.unique_drugs.shape[0]
+            
+        
         self.nmolecular_features  = self.molecular_data.shape[1]
         self.ncelltypes = self.cell_line.shape[0]
         
@@ -57,11 +60,14 @@ class MyDataSet(Dataset):
         self.cases_train = self.cases[np.isin(self.cases['cell_line'], self.cell_lines_train)]
         self.cases_test = self.cases[np.isin(self.cases['cell_line'], self.cell_lines_test)]
         
-        print(self.cases_train.shape, self.cases_test.shape)
+        self.cell_lines_train_filtered = np.array(self.cases_train['cell_line'].drop_duplicates())
+        self.cell_lines_test_filtered = np.array(self.cases_test['cell_line'].drop_duplicates())
         
-        self.current_cell_lines = self.cell_lines_train if train_test == 'train' else self.cell_lines_test
-        self.current_molecular_data = self.molecular_data.iloc[np.array(self.cell_ids_train),:] if train_test == 'train' else self.molecular_data.iloc[np.array(self.cell_ids_test),:]
+        self.current_cell_lines = self.cell_lines_train_filtered if train_test == 'train' else self.cell_lines_test_filtered
         
+        #self.current_molecular_data = self.molecular_data.iloc[np.array(self.cell_ids_train),:] if train_test == 'train' else self.molecular_data.iloc[np.array(self.cell_ids_test),:]
+        self.current_molecular_data = self.molecular_data.loc[self.cell_lines_train_filtered,:] if train_test == 'train' else self.molecular_data.loc[self.cell_lines_test_filtered,:]
+                
         if train_test == 'train':
             self.scaler = StandardScaler().fit(self.current_molecular_data)
             
@@ -71,10 +77,10 @@ class MyDataSet(Dataset):
         self.current_cases = self.cases_train.reset_index(drop=True) if train_test == 'train' else self.cases_test.reset_index(drop=True)
         
         #save files
-        test_names = pd.DataFrame({'cell_line': self.cell_lines_test})
+        test_names = pd.DataFrame({'cell_line': self.cell_lines_test_filtered})
         test_names['train_test'] = 'test'
         
-        train_names = pd.DataFrame({'cell_line': self.cell_lines_train})
+        train_names = pd.DataFrame({'cell_line': self.cell_lines_train_filtered})
         train_names['train_test'] = 'train'
         
         names = pd.concat((test_names, train_names), axis=0)
@@ -98,15 +104,17 @@ class MyDataSet(Dataset):
         
         
         ##node2vec drug embedding
-        #current_drug_embedding = self.drug_embeddings_tensor[:,current_drugname== self.drug_embeddings.columns].squeeze()
+        current_drug_embedding = self.drug_embeddings_tensor[:,current_drugname== self.drug_embeddings.columns].squeeze()
         current_drug_fingerprint = self.drug_fingerprints_tensor[:,self.drug_fingerprints.columns == current_drugname].squeeze() if current_drugname in self.drug_fingerprints.columns else tc.zeros(self.drug_fingerprints_tensor.shape[1]).squeeze()
         
 
         current_drug_onehot = self.drug_onehot_tensor[:,self.unique_drugs_array == current_drugname].squeeze()
         
-
-        #current_drug_embedding_with_dose = tc.cat((current_drug_embedding, current_drug_fingerprint,current_drug_onehot), axis=0)
-        current_drug_embedding_with_dose = tc.cat((current_drug_fingerprint,current_drug_onehot), axis=0)
+        if s.with_compound:
+            current_drug_embedding_with_dose = tc.cat((current_drug_embedding, current_drug_fingerprint,current_drug_onehot), axis=0)
+            
+        else:
+            current_drug_embedding_with_dose = tc.cat((current_drug_fingerprint,current_drug_onehot), axis=0)
 
         current_molecular_data = self.current_molecular_data_tensor[tc.tensor(self.current_molecular_data.index == current_model_id).squeeze(),:].squeeze()
 
@@ -121,12 +129,27 @@ class MyDataSet(Dataset):
         all_ids = tc.randperm(cell_names.shape[0])
         id_split = np.array_split(all_ids, self.splits)
         return id_split, [cell_names[current] for current in id_split]
+        
+        
+    def get_drug_vector(self, current_drugname):
+        current_drug_embedding = self.drug_embeddings_tensor[:,current_drugname== self.drug_embeddings.columns].squeeze()
+        current_drug_fingerprint = self.drug_fingerprints_tensor[:,self.drug_fingerprints.columns == current_drugname].squeeze() if current_drugname in self.drug_fingerprints.columns else tc.zeros(self.drug_fingerprints_tensor.shape[1]).squeeze()
+        
+        current_drug_onehot = self.drug_onehot_tensor[:,self.unique_drugs_array == current_drugname].squeeze()
+        current_drug_embedding_with_dose = tc.cat((current_drug_embedding, current_drug_fingerprint,current_drug_onehot), axis=0)
+        
+        return current_drug_embedding_with_dose
+
 
 
 class LRPSet(MyDataSet):
     def change_fold(self,fold, train_test):
         super().change_fold(fold, train_test)
-        self.chosen_drugs = ['POZIOTINIB', 'TRAMETINIB', 'COBIMETINIB', 'DACOMITINIB', 'PELITINIB', 'IBRUTINIB', 'IDASANUTLIN', 'VINCRISTINE', 'SELUMETINIB','CANERTINIB', 'OSIMERTINIB' 'UPROSERTIB', 'DASATINIB', 'LAPATINIB', 'VINBLASTINE', 'OSIMERTINIB']
+        self.chosen_drugs = ['POZIOTINIB', 'TRAMETINIB', 'COBIMETINIB', 'DACOMITINIB', 'PELITINIB', 'IBRUTINIB', 'IDASANUTLIN', 'VINCRISTINE','CANERTINIB', 'DASATINIB', 'LAPATINIB', 'VINBLASTINE']
+        
+        #self.chosen_drugs = ['SORAFENIB', 'IRINOTECAN', 'TAMOXIFEN', '5-FLUOROURACIL', 'LAPATINIB', 'BORTEZOMIB', 'GEMCITABINE', 'DOXORUBICIN', 'DABRAFENIB', 'VEMURAFENIB', 'EPIRUBICIN', 'CYCLOPHOSPHAMIDE', 'THALIDOMIDE']
+        
+        
         self.current_cases = self.current_cases[np.isin(self.current_cases['DRUG'], self.chosen_drugs)].reset_index(drop=True)
         
         print(self.current_cases)
@@ -134,5 +157,21 @@ class LRPSet(MyDataSet):
         self.current_cases = self.current_cases[['DRUG', 'cell_line', 'auc_per_drug']].groupby(['DRUG', 'cell_line'])['auc_per_drug'].mean().reset_index()
         print(self.current_cases)
 
+
+class LRPSet_CellLines(MyDataSet):
+    def change_fold(self,fold, train_test):
+        super().change_fold(fold, train_test)
+        #self.chosen_drugs = ['POZIOTINIB', 'TRAMETINIB', 'COBIMETINIB', 'DACOMITINIB', 'PELITINIB', 'IBRUTINIB', 'IDASANUTLIN', 'VINCRISTINE', 'SELUMETINIB','CANERTINIB', 'OSIMERTINIB', 'DASATINIB', 'LAPATINIB', 'VINBLASTINE']
         
+        self.chosen_cell_lines = ['ACH-000681', 'ACH-000971', 'ACH-000019', 'ACH-000090']
+        
+        
+        self.current_cases = self.current_cases[np.isin(self.current_cases['cell_line'], self.chosen_cell_lines)].reset_index(drop=True)
+        
+        print(self.current_cases)
+
+        self.current_cases = self.current_cases[['DRUG', 'cell_line', 'auc_per_drug']].groupby(['DRUG', 'cell_line'])['auc_per_drug'].mean().reset_index()
+        print(self.current_cases)
+
+
 
