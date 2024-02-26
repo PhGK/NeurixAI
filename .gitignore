@@ -7,3 +7,4 @@
 /results_without_compound_embedding/*
 /*results*/*
 .ipynb_checkpoints
+/docs/*
