@@ -23,11 +23,13 @@ def crossvalidate(model,ds, device):
 
 
         if False:
+            # Model is trained and tested
             model = train_test(model, ds, lr=0.05,nepochs=50, fold=i, device=device) #been 51 epochs, then 50
             tc.save(model.state_dict(), './results/model_params/model_params_fold'+ str(i) +'.pt')
             
         
         if True:
+            # Calculation of all LRP values
             LRP_ds = LRPSet(nsplits = 5)
             LRP_ds.change_fold(i, 'train') #just to calculate scaling parameters
             LRP_ds.change_fold(i, 'test')

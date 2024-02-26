@@ -32,10 +32,7 @@ class MyDataSet(Dataset):
 
         self.cell_ids_test_lists, self.cell_lines_test_lists = self.generate_train_and_test_ids(self.molecular_data.index) 
         
-        if s.with_compound:
-            self.ndrug_features = self.drug_embeddings.shape[0] + self.drug_fingerprints.shape[0]   + self.unique_drugs.shape[0]
-        else:
-            self.ndrug_features = self.drug_fingerprints.shape[0]   + self.unique_drugs.shape[0]
+        self.ndrug_features = self.unique_drugs.shape[0]
             
         
         self.nmolecular_features  = self.molecular_data.shape[1]
@@ -48,6 +45,12 @@ class MyDataSet(Dataset):
 
 
     def change_fold(self,fold, train_test):
+        """Sets fold and checks if in train or test set
+
+        Args:
+            fold (_type_): _description_
+            train_test (_type_): _description_
+        """
         if not os.path.exists('./results/train_test_splits/'):
             os.makedirs('./results/train_test_splits/')
 
@@ -104,23 +107,19 @@ class MyDataSet(Dataset):
         
         
         ##node2vec drug embedding
-        current_drug_embedding = self.drug_embeddings_tensor[:,current_drugname== self.drug_embeddings.columns].squeeze()
+        # Structure description not necessary atm
+        """current_drug_embedding = self.drug_embeddings_tensor[:,current_drugname== self.drug_embeddings.columns].squeeze()
         current_drug_fingerprint = self.drug_fingerprints_tensor[:,self.drug_fingerprints.columns == current_drugname].squeeze() if current_drugname in self.drug_fingerprints.columns else tc.zeros(self.drug_fingerprints_tensor.shape[1]).squeeze()
-        
+        """
 
+        # only use this for now
         current_drug_onehot = self.drug_onehot_tensor[:,self.unique_drugs_array == current_drugname].squeeze()
-        
-        if s.with_compound:
-            current_drug_embedding_with_dose = tc.cat((current_drug_embedding, current_drug_fingerprint,current_drug_onehot), axis=0)
-            
-        else:
-            current_drug_embedding_with_dose = tc.cat((current_drug_fingerprint,current_drug_onehot), axis=0)
 
         current_molecular_data = self.current_molecular_data_tensor[tc.tensor(self.current_molecular_data.index == current_model_id).squeeze(),:].squeeze()
 
         current_outcome = tc.tensor(case['auc_per_drug']).float() 
 
-        return current_drug_embedding_with_dose, current_molecular_data, current_outcome.unsqueeze(0), idx
+        return current_drug_onehot, current_molecular_data, current_outcome.unsqueeze(0), idx
 
 
 
