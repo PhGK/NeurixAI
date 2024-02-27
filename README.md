@@ -11,7 +11,8 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
    - Lineages: 32
    - Source: Broad Institute
 
-3. 
+3. **secondary-screen-replicate-treatment-info.csv**: List of all drugs in secondary screening with metadata like smiles codes and more. 
+4. **Repurposing_Public_23Q2_Extended_Primary_Compound_List.csv**: All drug names, targets and pathways.
 
 ### PRISM 
 - [Nature article on anticancer potential of non-oncology drugs by systematic viability profiling](https://www.nature.com/articles/s43018-019-0018-6)
