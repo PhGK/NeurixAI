@@ -13,6 +13,7 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 
 3. **secondary-screen-replicate-treatment-info.csv**: List of all drugs in secondary screening with metadata like smiles codes and more. 
 4. **Repurposing_Public_23Q2_Extended_Primary_Compound_List.csv**: All drug names, targets and pathways.
+5. **secondary-screen-dose-response-curve-parameters.csv**: Parameters of dose-response curves fit to replicate-level viability data using a four-parameter log-logistic function.
 
 ### PRISM 
 - [Nature article on anticancer potential of non-oncology drugs by systematic viability profiling](https://www.nature.com/articles/s43018-019-0018-6)
