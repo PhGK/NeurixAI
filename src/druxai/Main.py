@@ -1,10 +1,10 @@
 import torch as tc
-from data import MyDataSet
+from druxai.utils.data import MyDataSet
 #from training import train_test
-from NN import Interaction_Model
+from druxai.models.NN import Interaction_Model
 import os
 import pandas as pd
-from crossant import crossvalidate
+from druxai.utils.cross_validate import crossvalidate
 import sys
 
 
