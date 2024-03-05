@@ -22,6 +22,11 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 
 # Pharmacogenomic Landscape Interactions for GDSC1/2 Dataset
 - [Cell article](https://www.sciencedirect.com/science/article/pii/S0092867416307462)
+- Integration of heterogeneous molecular data from 11,289 tumors and 1,001 cell lines
+- Measurement of the response of 1,001 cancer cell lines to 265 anti-cancer drugs
+- Discovery of numerous oncogenic aberrations that sensitize to anti-cancer drugs
+- Provision of a valuable resource to identify therapeutic options for cancer sub-populations
+
 <img width="576" alt="Bildschirmfoto 2024-03-05 um 08 16 37" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/4287677e-14ec-4557-90b4-670390d9e1f3">
 <img width="854" alt="Bildschirmfoto 2024-03-05 um 08 56 47" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/e71a14c2-ed31-4804-9daa-a957a5025734">
 <img width="743" alt="Bildschirmfoto 2024-03-05 um 09 13 44" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/e9d50d4a-d478-44a0-b943-8c01ce687586">
