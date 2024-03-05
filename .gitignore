@@ -10,3 +10,4 @@
 /docs/*
 /logs/*
 .flake8
+*.pyc
