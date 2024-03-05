@@ -1,70 +1,34 @@
-from druxai.train import train_test
-from druxai.models.LRP import calculate_one_side_LRP, calculate_one_side_LRP_specific_genes
-import pandas as pd
-import numpy as np
-import copy
+from models.LRP import calculate_one_side_LRP
 import torch as tc
-from druxai.models.NN import Interaction_Model
+from models.NN import Interaction_Model
 import os
-from data import LRPSet,MyDataSet, LRPSet_CellLines
+from utils.data import LRPSet
 
 
-def crossvalidate(model,ds, device):
-    if not os.path.exists('./results/model_params/'):
-        os.makedirs('./results/model_params/')
+def crossvalidate(model, ds, device, results_dir="../../results"):
+    """_summary_
 
+    Args:
+        model (_type_): _description_
+        ds (_type_): _description_
+        device (_type_): _description_
+        results_dir (str, optional): _description_. Defaults to "../../results".
+    """
+
+    os.makedirs(os.path.join(results_dir, 'model_params'), exist_ok=True)
     tc.save(model.state_dict(), './results/raw_params.pt')
 
-    for i in [4]: #range(ds.splits):
-
-
+    for i in [4]:  # range(ds.splits):
         model = Interaction_Model(ds)
-        #model.load_state_dict(tc.load('./results/raw_params.pt'))
-
-
-        if False:
-            # Model is trained and tested
-            model = train_test(model, ds, lr=0.05,nepochs=50, fold=i, device=device) #been 51 epochs, then 50
-            tc.save(model.state_dict(), './results/model_params/model_params_fold'+ str(i) +'.pt')
-            
-        
+        # model.load_state_dict(tc.load('./results/raw_params.pt'))
         if True:
             # Calculation of all LRP values
-            LRP_ds = LRPSet(nsplits = 5)
-            LRP_ds.change_fold(i, 'train') #just to calculate scaling parameters
+            LRP_ds = LRPSet(n_splits=5)
+            LRP_ds.change_fold(i, 'train')  # just to calculate scaling parameters
             LRP_ds.change_fold(i, 'test')
-            model.load_state_dict(tc.load('./results/model_params/model_params_fold'+ str(i) +'.pt'))
+            model.load_state_dict(
+                tc.load(
+                    './results/model_params/model_params_fold' +
+                    str(i) +
+                    '.pt'))
             calculate_one_side_LRP(model, LRP_ds, fold=i)
-            
-        if False:
-            LRP_ds = LRPSet_CellLines(nsplits = 5)
-            LRP_ds.change_fold(i, 'train') #just to calculate scaling parameters
-            LRP_ds.change_fold(i, 'test')
-            model.load_state_dict(tc.load('./results/model_params/model_params_fold'+ str(i) +'.pt'))
-            calculate_one_side_LRP(model, LRP_ds, fold=i, PATH = './results/LRP_chosen_cell_lines/')
-            
-            
-            
-        if False:
-            #specific_genes = np.array(pd.read_csv('./results/important_genes.csv')['molecular_names'])
-            specific_genes = np.array(['ABCB1'])
-            print(specific_genes)
-            
-            ds = MyDataSet(nsplits = 5)
-            
-            ds.change_fold(i, 'train') #just to calculate scaling parameters
-            ds.change_fold(i, 'test')
-            model.load_state_dict(tc.load('./results/model_params/model_params_fold'+ str(i) +'.pt'))
-            calculate_one_side_LRP_specific_genes(model, ds,specific_genes = specific_genes, fold=i)
-
-            
-
-
-
-
-            
-
-
-
-
-

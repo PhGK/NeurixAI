@@ -1,6 +1,5 @@
 import torch as tc
 from druxai.utils.data import MyDataSet
-#from training import train_test
 from druxai.models.NN import Interaction_Model
 import os
 import pandas as pd
@@ -12,23 +11,12 @@ print(sys.argv)
 def main():
     if not os.path.exists('./results/data/'):
         os.makedirs('./results/data/')
-
     
     ds = MyDataSet(nsplits = 5)
-
-    ################
-    #construct model
-    ################
-
     model_interaction = Interaction_Model(ds)
 
-
-    #################
-    #crossvalidate
-    #################
+    # crossvalidate
     crossvalidate(model_interaction,ds, device = tc.device('cuda:0'))
-
-
 
 if __name__ == '__main__':
     print('lets go')

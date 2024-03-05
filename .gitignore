@@ -11,3 +11,5 @@
 /logs/*
 .flake8
 *.pyc
+*.pt
+*.csv
