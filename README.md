@@ -24,3 +24,4 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 - [Cell article](https://www.sciencedirect.com/science/article/pii/S0092867416307462)
 <img width="576" alt="Bildschirmfoto 2024-03-05 um 08 16 37" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/4287677e-14ec-4557-90b4-670390d9e1f3">
 <img width="854" alt="Bildschirmfoto 2024-03-05 um 08 56 47" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/e71a14c2-ed31-4804-9daa-a957a5025734">
+<img width="743" alt="Bildschirmfoto 2024-03-05 um 09 13 44" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/e9d50d4a-d478-44a0-b943-8c01ce687586">
