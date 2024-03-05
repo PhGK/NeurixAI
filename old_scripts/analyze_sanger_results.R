@@ -21,11 +21,11 @@ sanger_result <- sanger_dat %>%
   group_by(drug) %>%
   dplyr::summarize(meanv = mean(rho), maxv = max(rho), minv = min(rho)) %>%
   arrange(meanv) %>%
-  mutate(drug = factor(drug, levels = drug), above_thresh = meanv>0.2) 
+  mutate(drug = factor(drug, levels = drug), above_thresh = meanv>0.2)
 
 
-sanger_plot <- ggplot(result, aes(y = drug, x = meanv)) + 
-  geom_point() + 
+sanger_plot <- ggplot(result, aes(y = drug, x = meanv)) +
+  geom_point() +
   geom_errorbar(aes(xmin=minv, xmax = maxv)) +
   theme_classic() +
   geom_vline(xintercept = 0.2, linetype = 'dashed')

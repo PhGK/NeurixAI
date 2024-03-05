@@ -55,7 +55,7 @@ selected_cell_lines <- cell_line_names %>%
 
 
 head(dat)
-dat_wide <- dat %>% 
+dat_wide <- dat %>%
   dplyr::select(DRUG, cell_line, molecular_names, LRP) %>%
   filter(molecular_names %in% important_genes) %>%
   pivot_wider(names_from = molecular_names, values_from = LRP) %>%
@@ -65,15 +65,15 @@ drugs <- dat_wide$DRUG %>% unique()
 get_tsne <- function(drug) {
   print(drug)
   dat_wide_filtered <- dat_wide %>% filter(DRUG == drug)
-  
+
   dat_matrix <- dat_wide_filtered %>% .[,-c(1,2)] %>% as.matrix()
   pca_dat <- Rtsne(dat_matrix, perplexity = 50)
-  
-  pca_dat_all <- pca_dat$Y %>% 
+
+  pca_dat_all <- pca_dat$Y %>%
     as.data.frame() %>%
     cbind(dat_wide_filtered %>% select(DRUG, cell_line)) %>%
     left_join(cell_line_names)
-  
+
   pca_dat_all
 }
 
@@ -118,7 +118,7 @@ skinvsnoskin_wide <- skinvsnoskin %>% pivot_wider(names_from = isskin, values_fr
 #    output[i] <- output[i-1] + ordered_values[i]
 #  }
 #  output
-#  
+#
 #}
 
 mean_contribution_per_gene_per_cell_line <- dat %>%
@@ -139,10 +139,9 @@ res1 <- mean_contribution_per_gene #%>% filter(DRUG == 'IDASANUTLIN')
 text <- res1 %>% group_by(DRUG) %>%filter(rankl == max(rankl))
 
 png(paste0('./figures/cumulative_contribution.png'), width = 2000, height=2000, res=200)
-ggplot(mean_contribution_per_gene_per_cell_line, aes(x = rankl, y = cumulative, color = DRUG, group = cell_line, label = DRUG)) + 
+ggplot(mean_contribution_per_gene_per_cell_line, aes(x = rankl, y = cumulative, color = DRUG, group = cell_line, label = DRUG)) +
   geom_line() +
   #geom_point() +
   #geom_text_repel(data=text) +
   facet_wrap(~DRUG)
 dev.off()
-

@@ -22,8 +22,8 @@ read_dat_embedding <- function() {
   files <- list.files(paste0('../results/training/'))
   print(files)
   d <- rbindlist(lapply(files, function(f) fread(paste0('../results/training/', f))))
-  d %>% mutate('embedding' = T) 
-  
+  d %>% mutate('embedding' = T)
+
 }
 
 dat_no_embedding <- read_dat_no_embedding() %>%
@@ -88,19 +88,18 @@ number_of_hits <- cor_random %>% mutate(hit = (r>=0.2)) %>%
 number_of_hits_wide <- number_of_hits %>%
   pivot_wider(names_from = embedding,values_from = perc_hits)
 
-ggplot(number_of_hits, aes(x = as.factor(embedding),  y = perc_hits,group = as.factor(fold), label = as.factor(fold))) + 
+ggplot(number_of_hits, aes(x = as.factor(embedding),  y = perc_hits,group = as.factor(fold), label = as.factor(fold))) +
   geom_line() +
   geom_label() +
   theme_minimal()
 
 png('./figures/compareNode2Vec_Control.png', width=2000, height=1000, res= 250)
-ggplot(number_of_hits_wide, aes(x = `With Node2Vec embedding`, y = Control, label = as.factor(fold))) + 
+ggplot(number_of_hits_wide, aes(x = `With Node2Vec embedding`, y = Control, label = as.factor(fold))) +
   geom_point() +
   geom_label_repel() +
   geom_abline() +
   theme_minimal() +
-  scale_y_continuous(labels = scales::percent)+ 
+  scale_y_continuous(labels = scales::percent)+
   scale_x_continuous(labels = scales::percent)
-  
-dev.off()
 
+dev.off()

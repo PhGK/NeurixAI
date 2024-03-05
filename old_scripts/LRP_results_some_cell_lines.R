@@ -24,7 +24,7 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 MOA <- fread('../data/secondary-screen-dose-response-curve-parameters.csv') %>%
   select(name, moa, target, disease.area, indication) %>%
   unique() %>%
-  mutate(drugs = toupper(name), unique_moa = str_split_fixed(moa, ',', 2)[,1]==moa, 
+  mutate(drugs = toupper(name), unique_moa = str_split_fixed(moa, ',', 2)[,1]==moa,
          disease = (grepl( 'malignancy',disease.area, fixed=T)) |(grepl( 'oncology',disease.area, fixed=T))) %>%
   select(DRUG = drugs, moa) %>%
   group_by(moa) %>%
@@ -54,7 +54,7 @@ read_dat <- function() {
 dat <- read_dat() %>% left_join(cell_line_names) %>% unique()# %>%
   #filter(abs(LRP)>0.5)
 
-drug_dependent_genes <- dat %>% 
+drug_dependent_genes <- dat %>%
   group_by(cell_line, molecular_names) %>%
   dplyr::summarize(absmeanLRP = abs(mean(LRP)), std = sd(LRP)) %>%
   group_by(cell_line) %>%
@@ -67,7 +67,7 @@ important_genes <- dat %>%
   dplyr::summarize(meanabsLRP = mean(abs(LRP))) %>%
   ungroup() %>%
   filter(meanabsLRP > quantile(meanabsLRP, 0.9))
-  
+
 important_dat <- dat %>% filter(molecular_names %in% important_genes$molecular_names)
 ht_list = list()
 lines <- dat$cell_line %>% unique()
@@ -81,7 +81,7 @@ for_heatmap <- important_dat %>% filter(cell_line == lines[i]) %>%
   select(DRUG, molecular_names, LRP) %>%
   pivot_wider(names_from = molecular_names, values_from = LRP)
 
-for_heatmap_matrix <- for_heatmap[,-1] %>% as.matrix()       
+for_heatmap_matrix <- for_heatmap[,-1] %>% as.matrix()
 rownames(for_heatmap_matrix) <- for_heatmap$DRUG
 
 cancervsnoncancer <- read.csv('../data/biomarkers.csv') %>%
@@ -93,7 +93,7 @@ description <- for_heatmap %>%
   left_join(MOA)
 unique_drug_types = description %>%
   mutate(drug_category = ifelse(is.na(drug_category), 'NA', drug_category)) %>%
-  .$drug_category %>% unique() 
+  .$drug_category %>% unique()
 
 unique_selected <- description$selected_moa%>% unique()
 
@@ -110,7 +110,7 @@ ht_list[i] <- Heatmap(for_heatmap_matrix, show_column_dend=F, show_column_names=
 
 }
 
-heatmap_list <- ht_list[[1]] %v% ht_list[[2]] %v% ht_list[[3]] 
+heatmap_list <- ht_list[[1]] %v% ht_list[[2]] %v% ht_list[[3]]
 
 png('./figures/heatmap_prostate.png', width=3000, height=2000, res=200)
 heatmap_list
@@ -131,37 +131,37 @@ for (i in seq(4)) {
     #filter(meanabsLRP>quantile(meanabsLRP,0.8)) %>%
     select(DRUG, molecular_names, LRP) %>%
     pivot_wider(names_from = molecular_names, values_from = LRP)
-  
-  for_heatmap_matrix <- for_heatmap[,-1] %>% as.matrix()       
+
+  for_heatmap_matrix <- for_heatmap[,-1] %>% as.matrix()
   rownames(for_heatmap_matrix) <- for_heatmap$DRUG
-  
+
   cancervsnoncancer <- read.csv('../data/biomarkers.csv') %>%
     select(drugs=name, drug_category) %>%
     mutate(drugs = toupper(drugs)) %>% unique()
-  
+
   description <- for_heatmap %>%
     select(DRUG) %>% left_join(cancervsnoncancer %>% select(DRUG = drugs, drug_category)) %>%
     left_join(MOA)
   unique_drug_types = description %>%
     mutate(drug_category = ifelse(is.na(drug_category), 'NA', drug_category)) %>%
-    .$drug_category %>% unique() 
-  
+    .$drug_category %>% unique()
+
   unique_selected <- description$selected_moa%>% unique()
-  
+
   getPalette <- colorRampPalette(brewer.pal(11, 'Spectral'))
   #col_fun = colorRamp2(as.numeric(as.factor(unique_drug_types)), c('blue', 'red', 'darkgreen', 'black'))
-  
+
   some_colors <- getPalette(length(unique_selected))
   names(some_colors) <- unique_selected
   col_list = list(`Drug class` = some_colors)
   col_list$`Drug class`['other'] <- 'white'
-  
+
   if (lines[i]=='ACH-000019') title_name <- 'MCF7 (Breast)'
   if (lines[i]=='ACH-000090') title_name <- 'PC-3 (Prostate)'
   if (lines[i]=='ACH-000971') title_name <- 'HCT116 (Colon)'
   if (lines[i]=='ACH-000681') title_name <- 'A549 (Lung)'
-  
-  
+
+
   ha = rowAnnotation(df = description %>% select('Drug class' = selected_moa), col =col_list)
   png(paste0('./figures/heatmap_',lines[i], '_', title_name,'.png'), width=3000, height=1000, res=200)
   draw(Heatmap(for_heatmap_matrix[,], name = title_name, show_column_dend=F, show_column_names=F, show_row_names=F, right_annotation = ha))
@@ -217,15 +217,15 @@ line_dat <- dat %>% filter(cell_line == lines[1]) %>%
 matrix_for_corr <- line_dat %>% select(-molecular_names) %>% as.matrix()
 rownames(matrix_for_corr) <- line_dat$molecular_names
 
-corrs <- cor(matrix_for_corr) 
+corrs <- cor(matrix_for_corr)
 
 description1 <- description %>%
   select(f1 = DRUG, m1 = moa, c1 = drug_category)
-  
+
 description2 <- description %>%
   select(f2 = DRUG, m2 = moa, c2 = drug_category)
-  
-corrs_long <-  corrs %>% 
+
+corrs_long <-  corrs %>%
   as.data.frame() %>%
   mutate(f1 = rownames(.)) %>%
   pivot_longer(!f1, names_to = 'f2', values_to = 'r') %>%
@@ -245,4 +245,3 @@ ggplot(corrs_long_summarized, aes(x = c1, y = meancorr)) + geom_boxplot(width=0.
   facet_grid(c2~1) +
   theme_minimal()
 dev.off()
-

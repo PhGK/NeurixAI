@@ -26,7 +26,7 @@ read_dat <- function() {
   d
 }
 
-dat <- read_dat() 
+dat <- read_dat()
 
 get_slope <- function(y,x) {
   model <- lm(y~x)$coef[2]
@@ -73,7 +73,7 @@ MOA <- fread('../data/secondary-screen-dose-response-curve-parameters.csv') %>%
 
 
 relevantometer_data <- across_cell_lines %>% filter(molecular_names %in% sel_genes) %>%
-  left_join(MOA) 
+  left_join(MOA)
 
 order_by_moa <- relevantometer_data %>%
   select(moa, DRUG) %>%
@@ -81,14 +81,14 @@ order_by_moa <- relevantometer_data %>%
   dplyr::arrange(moa)
 
 relevantometer_data <- relevantometer_data %>%
-    mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG)) 
+    mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG))
 across_cell_lines$molecular_names %>% unique() %>% length()
 
 high_relevantometer_data <- relevantometer_data %>% filter(pos > 0.9)
 low_relevantometer_data <- relevantometer_data %>% filter(pos <= 0.9)
 
 #################for manuscript##################################################
-read_percent_rank <- relevantometer_data %>% filter(molecular_names == 'MAP3K21')  
+read_percent_rank <- relevantometer_data %>% filter(molecular_names == 'MAP3K21')
 #################################################################################
 
 line_data <- relevantometer_data %>% cross_join(data.frame(x=c(0,1)))
@@ -110,7 +110,7 @@ relevantometer <- ggplot(relevantometer_data, aes(y = DRUG, x = pos, label = mol
         legend.text = element_text(size=15),
         legend.position = 'bottom') +
   #ylab('Low importance rank     \U2194     High importance rank')  +
-  xlab('xAI-assigned importance rank')+ 
+  xlab('xAI-assigned importance rank')+
   scale_y_discrete(limits=rev) +
   scale_x_continuous(labels=scales::percent, limits=c(0.0,1.0)) +
   coord_cartesian(xlim =c(0.0,1.0))
@@ -144,10 +144,10 @@ most_important_only_red <- most_important %>%
 most_important_without_red <- most_important %>%
   filter(!(molecular_names %in% sel_genes))
 
-most_important_genes_plot_rank <- ggplot(most_important, aes(x = DRUG, y = scaled_LRP, label = molecular_names)) + 
+most_important_genes_plot_rank <- ggplot(most_important, aes(x = DRUG, y = scaled_LRP, label = molecular_names)) +
   #geom_line(data = line_data, aes(x = DRUG, y= x, color=moa), linewidth=1) +
   geom_line(data = line_data, aes(x = DRUG, y= x, color=moa), linewidth=2, arrow = arrow(length=unit(1,"cm"), type = 'closed')) +
-  
+
   geom_text_repel(data = most_important_without_red, show.legend=F, size=6, color='black', max.overlaps=1000) +
   geom_label_repel(data = most_important_only_red, show.legend=F, size=6, color='red', max.overlaps = 1000) +
   geom_point(data=most_important_without_red, aes(x = DRUG, y = scaled_LRP),color='black', size=4.0) +
@@ -161,9 +161,9 @@ most_important_genes_plot_rank <- ggplot(most_important, aes(x = DRUG, y = scale
         legend.text = element_text(size=20),
         legend.position = 'bottom') +
   ylab('xAI-assigned Importance') +
-  coord_flip() + 
-  scale_x_discrete(limits=rev) 
-  
+  coord_flip() +
+  scale_x_discrete(limits=rev)
+
 
 most_important_genes_plot_rank
 png('./figures/important_genes.png', width=3000, height=1500, res=200)
@@ -202,7 +202,7 @@ write.csv(most_important10$molecular_names %>% unique(),'figures/reactome_genes1
 
 all_network_genes <- read.csv('../data/string_interactions_short.tsv',sep='\t')[,c(1,2)]
 colnames(all_network_genes) <- c('V1', 'V3')
-vertices_not_in_graph <- most_important10$molecular_names[!(most_important10$molecular_names %in% all_network_genes$V1) & 
+vertices_not_in_graph <- most_important10$molecular_names[!(most_important10$molecular_names %in% all_network_genes$V1) &
                                                           !(most_important10$molecular_names %in% all_network_genes$V3)] %>% unique()
 
 
@@ -226,12 +226,12 @@ png('./figures/networks_reactome.png', width = 3000, height=3500, res=150)
 par(mfrow=c(4,3), mar=c(0,0,2,0))
 for (current_drug in order_by_moa$DRUG){
   current_g <- g
-  current_data <- most_important10 %>% filter(DRUG == current_drug) 
+  current_data <- most_important10 %>% filter(DRUG == current_drug)
   current_genes <- current_data$molecular_names
   print(length(current_genes))
   node.size<-setNames(current_data$node_size, current_data$molecular_names)
   node.color<-setNames(current_data$node_color, current_data$molecular_names)
-  
+
   for (k in names(node.size)) {
     if (k %in% V(current_g)$name) {
       print(V(current_g)[k]$name)
@@ -244,11 +244,11 @@ for (current_drug in order_by_moa$DRUG){
   V(current_g)$color = ifelse(V(current_g)$name %in% current_genes, 'red', 'gray60')
   V(current_g)$vertexcolor[!((degree(current_g)>0) | (V(current_g)$name %in% current_genes))] <- NA
 
-  plot(current_g, vertex.size=V(current_g)$vertexsize, #ifelse(V(current_g)$name %in% current_genes,as.matrix(10), 5), 
-       layout=l, vertex.label.cex=2.0, vertex.label.color = 'black', edge.width=0.4, edge.color = 'black', 
+  plot(current_g, vertex.size=V(current_g)$vertexsize, #ifelse(V(current_g)$name %in% current_genes,as.matrix(10), 5),
+       layout=l, vertex.label.cex=2.0, vertex.label.color = 'black', edge.width=0.4, edge.color = 'black',
      vertex.color = adjustcolor(V(current_g)$vertexcolor,0.4), vertex.frame.color = NA,
-     vertex.label = ifelse(V(current_g)$name %in% current_genes, V(g)$name, NA))#, 
-     #vertex.label = V(current_g)$name, 
+     vertex.label = ifelse(V(current_g)$name %in% current_genes, V(g)$name, NA))#,
+     #vertex.label = V(current_g)$name,
      #main = current_drug, main.size=15)
   title(current_drug, cex.main = 2.5)
 }
@@ -268,23 +268,23 @@ most_important10 <- most_important10 %>% dplyr::select(molecular_names, meanabsL
 #png('./figures/networks_reactome.png', width = 3000, height=3500, res=150)
 par(mfrow=c(4,4), mar=c(0,0,1,0))
 for (current_drug in order_by_moa$DRUG){
-  
-  current_data <- most_important10 %>% filter(DRUG == current_drug) 
+
+  current_data <- most_important10 %>% filter(DRUG == current_drug)
   current_genes <- current_data$molecular_names
-  
+
   temp <- all_network_genes %>%
-    filter((V1 %in% current_genes) | (V3 %in% current_genes)) 
+    filter((V1 %in% current_genes) | (V3 %in% current_genes))
   current_genes_plus_linker <- c(temp$V1, temp$V3) %>% unique()
-  
+
   current_network <- all_network_genes %>%
     filter((V1 %in% current_genes_plus_linker) | (V3 %in% current_genes_plus_linker))
-  
-  vertices_not_in_graph <- current_data$molecular_names[!(current_data$molecular_names %in% current_network$V1) & 
+
+  vertices_not_in_graph <- current_data$molecular_names[!(current_data$molecular_names %in% current_network$V1) &
                                                               !(current_data$molecular_names %in% current_network$V3)] %>% unique()
-  
+
   g <- graph_from_data_frame(current_network, directed=F)
   g <- g + vertices(vertices_not_in_graph)
-  
+
   V(g)$vertexsize <- 5
   V(g)$vertexcolor = 'gray60'
   E(g)$weight <- 0.1
@@ -295,7 +295,7 @@ for (current_drug in order_by_moa$DRUG){
   print(length(current_genes))
   node.size<-setNames(current_data$node_size, current_data$molecular_names)
   node.color<-setNames(current_data$node_color, current_data$molecular_names)
-  
+
   for (k in names(node.size)) {
     if (k %in% V(g)$name) {
       print(V(g)[k]$name)
@@ -305,12 +305,12 @@ for (current_drug in order_by_moa$DRUG){
   print(V(g)$vertexsize)
   #V(current_g)$color = ifelse(V(current_g)$name %in% current_genes, 'red', 'gray60')
   #V(current_g)$color[!((degree(current_g)>0) | (V(current_g)$name %in% current_genes))] <- NA
-  
-  plot(g, vertex.size=V(g)$vertexsize, #ifelse(V(current_g)$name %in% current_genes,as.matrix(10), 5), 
-       layout=l, vertex.label.cex=1.0, vertex.label.color = 'black', edge.width=0.4, edge.color = 'black', 
+
+  plot(g, vertex.size=V(g)$vertexsize, #ifelse(V(current_g)$name %in% current_genes,as.matrix(10), 5),
+       layout=l, vertex.label.cex=1.0, vertex.label.color = 'black', edge.width=0.4, edge.color = 'black',
        vertex.color = adjustcolor(V(g)$vertexcolor,0.6), vertex.frame.color = NA,
-       vertex.label = ifelse(V(g)$name %in% current_genes, V(g)$name, NA), 
-       #vertex.label = V(current_g)$name, 
+       vertex.label = ifelse(V(g)$name %in% current_genes, V(g)$name, NA),
+       #vertex.label = V(current_g)$name,
        main = current_drug)
 }
 dev.off()
@@ -323,7 +323,7 @@ dev.off()
 #find similar genes within moa
 ###########
 most_important_plus_moa <- most_important10 %>% left_join(MOA)
-ggplot(most_important_plus_moa, aes(y= 0, x = scaled_LRP, color = moa, label=DRUG)) + #geom_boxplot() 
+ggplot(most_important_plus_moa, aes(y= 0, x = scaled_LRP, color = moa, label=DRUG)) + #geom_boxplot()
   geom_point() +
   geom_text_repel() +
   theme_classic() +
@@ -348,7 +348,7 @@ diff_data <- across_cell_lines %>%
   mutate(moa = ifelse((DRUG=='VINCRISTINE')| (DRUG == 'VINBLASTINE'), 'CHEMO', moa)) %>%
   filter(molecular_names %in% (difference_plus_moa %>% filter(moa ==moas[number]) %>% .$molecular_names %>% .[1:10])) %>%
   filter(moa %in% moas[number]) %>%
-  mutate(DRUGpos = paste0(DRUG, ' (', round(pos*100), '%)')) 
+  mutate(DRUGpos = paste0(DRUG, ' (', round(pos*100), '%)'))
 
 
 ggplot(diff_data, aes(y = molecular_names, x = pos, label = DRUGpos)) +
@@ -369,22 +369,22 @@ dev.off()
 ##########
 #only selected genes
 rel_gene_names_here <- rel_gene_names %>% filter(molecular_names!= 'MAP2K1')
-selected_genes_dynamics <- dat %>% filter(molecular_names %in% rel_gene_names_here$molecular_names) 
+selected_genes_dynamics <- dat %>% filter(molecular_names %in% rel_gene_names_here$molecular_names)
 last_name <- selected_genes_dynamics %>% group_by(DRUG, molecular_names) %>%
   dplyr::mutate(smooth = loess(LRP~expression)$fitted) %>%
   filter(expression == max(expression))
 
 most_important_genes_dynamics <- dat %>% filter(molecular_names %in% most_important$molecular_names)
- 
-resistance <- data.frame('resistance' = c('higher resistance', 'higher_sensitivity'), y = c(1,-1)) 
-arrows <- selected_genes_dynamics %>% 
+
+resistance <- data.frame('resistance' = c('higher resistance', 'higher_sensitivity'), y = c(1,-1))
+arrows <- selected_genes_dynamics %>%
   group_by(molecular_names, DRUG) %>%
   dplyr::summarize(x_coord = min(expression)-1, DRUG=first(DRUG)) %>%
   dplyr::select(x_coord, molecular_names, DRUG) %>%
   unique() %>%
   cross_join(resistance)
 
-dynamics_selected_genes <- ggplot(selected_genes_dynamics, aes(x = expression, y = LRP, color=DRUG)) + 
+dynamics_selected_genes <- ggplot(selected_genes_dynamics, aes(x = expression, y = LRP, color=DRUG)) +
   geom_point(size=0.1) +
   geom_smooth(se=F, linewidth=0.4) +
   geom_text_repel(data = last_name, aes(x = expression, y =smooth, label = DRUG), size=4, color = 'black', hjust= -0.5, direction = 'y') +
@@ -396,7 +396,7 @@ dynamics_selected_genes <- ggplot(selected_genes_dynamics, aes(x = expression, y
   xlim(c(-2,6)) +
   theme(strip.text = element_text(size=15),
         axis.text = element_text(size=12),
-        axis.title = element_text(size=20), 
+        axis.title = element_text(size=20),
         legend.text = element_text(size=13),
         legend.title = element_blank(),
         legend.position = 'bottom')
@@ -410,12 +410,12 @@ dev.off()
 
 arrow <- ggplot() + geom_line(aes(x = c(0,0), y = c(0.1,1)), linewidth=2, arrow=arrow(length=unit(0.3,"cm"), type = 'closed'), color = 'red') +
   geom_line(aes(x = c(0,0), y = c(-0.1,-1)), linewidth=2, arrow=arrow(length=unit(0.3,"cm"), type = 'closed'), color = 'darkgreen') +
-  geom_text(aes(x = 0, y = 1.2, label = 'Resistance'),size=6)+ 
+  geom_text(aes(x = 0, y = 1.2, label = 'Resistance'),size=6)+
   geom_text(aes(x = 0, y = -1.2, label = 'Sensitivity'), size=6) +
 
   theme_void()
 arrow_plot <- plot_grid(NULL, arrow, NULL, ncol=1, rel_heights = c(0.8,1,0.95) )
-  
+
 png('./figures/dynamics_of_LRPcontribution_with_arrow.png', width=4000, height=4500, res=300)
 plot_grid(dynamics_selected_genes, arrow_plot, rel_widths = c(100,10))
 dev.off()
@@ -432,18 +432,18 @@ cell_line_names <- fread('../data/secondary-screen-dose-response-curve-parameter
   mutate(ORGAN = ccle_name %>% str_split('_') %>% sapply(function(x) x[2])) %>%
   filter(!(ORGAN %in% c('SOFT', NA))) %>%
   filter(!is.na(ORGAN))
-cell_line_names$ccle_name %>% unique() %>% length() 
+cell_line_names$ccle_name %>% unique() %>% length()
 
-observemoa  <- dat %>% 
+observemoa  <- dat %>%
   left_join(cell_line_names) %>%
   left_join(MOA) %>%   filter(moa == 'MEK inhibitor') %>%
   group_by(ORGAN, molecular_names) %>%
-  dplyr::summarize(meanabsLRP = (mean(abs(LRP)))) 
+  dplyr::summarize(meanabsLRP = (mean(abs(LRP))))
 
 observe <- observemoa %>%
   group_by(ORGAN) %>%
   mutate(rankl = rank(meanabsLRP)) %>%
-  filter(molecular_names %in% c('MAP2K1', 'MAP2K2', 'BRAF')) 
+  filter(molecular_names %in% c('MAP2K1', 'MAP2K2', 'BRAF'))
 
 ggplot(observe, aes(y = ORGAN, x = meanabsLRP)) +
   geom_point() +
@@ -472,16 +472,16 @@ library(ComplexHeatmap)
 drug = 'POZIOTINIB'
 
 get_heatmap <- function(drug) {
-  for_heatmap <- dat %>% dplyr::filter(molecular_names %in% most_important_gene_names10$molecular_names, DRUG == drug) 
-  
+  for_heatmap <- dat %>% dplyr::filter(molecular_names %in% most_important_gene_names10$molecular_names, DRUG == drug)
+
   heatmap_frame <- for_heatmap %>% dplyr::select(LRP, molecular_names, cell_line) %>%
-    pivot_wider(names_from = cell_line, values_from = LRP) 
-  
+    pivot_wider(names_from = cell_line, values_from = LRP)
+
   heatmap_matrix <- heatmap_frame[,-1] %>% as.matrix()
   rownames(heatmap_matrix) <- heatmap_frame$molecular_names
-  Heatmap(heatmap_matrix, row_names_gp = grid::gpar(fontsize = 14), show_column_dend=F, show_row_dend=F, column_title = drug, 
+  Heatmap(heatmap_matrix, row_names_gp = grid::gpar(fontsize = 14), show_column_dend=F, show_row_dend=F, column_title = drug,
           show_column_names=F,show_heatmap_legend =F)
-  
+
   #heatmap_matrix
 }
 
@@ -495,7 +495,7 @@ ht_list <- lapply(some_selected_drugs,get_heatmap)
 some_selected_drugs %>% length()
 
 
-real_ht_list <- ht_list[[1]] +  ht_list[[2]] +  ht_list[[3]] + ht_list[[4]]+ ht_list[[5]] +  ht_list[[6]] +  ht_list[[7]] +ht_list[[8]] +  
+real_ht_list <- ht_list[[1]] +  ht_list[[2]] +  ht_list[[3]] + ht_list[[4]]+ ht_list[[5]] +  ht_list[[6]] +  ht_list[[7]] +ht_list[[8]] +
   ht_list[[9]] +  ht_list[[10]] +ht_list[[11]] +  ht_list[[12]] #+ht_list[[13]] #+ht_list[[14]] +  ht_list[[15]]
 
 png('./figures/heatmaps.png', width=6000, height=5000, res=300)
@@ -507,37 +507,37 @@ dev.off()
 getPalette = colorRampPalette(brewer.pal(11, 'Spectral'))
 
 get_heatmap10_per_drug <- function(drug) {
-  
+
   most_important_now <- across_cell_lines %>%
     filter(DRUG==drug) %>%
     dplyr::mutate(cutoff = get_nth(meanabsLRP,50), scaled_LRP = meanabsLRP/max(meanabsLRP)) %>%
     filter(meanabsLRP>=cutoff) %>%
     mutate(rel = molecular_names %in% sel_genes) %>%
     mutate(DRUG = factor(DRUG, levels = order_by_moa$DRUG))
-  
-  for_heatmap <- dat %>% dplyr::filter(molecular_names %in% most_important_now$molecular_names, DRUG == drug) 
-  
-  
+
+  for_heatmap <- dat %>% dplyr::filter(molecular_names %in% most_important_now$molecular_names, DRUG == drug)
+
+
   heatmap_frame <- for_heatmap %>% dplyr::select(LRP, molecular_names, cell_line) %>%
     pivot_wider(names_from = cell_line, values_from = LRP)
-  
+
   heatmap_matrix <- heatmap_frame[,-1] %>% as.matrix()
   rownames(heatmap_matrix) <- heatmap_frame$molecular_names
-  
+
   dend = as.dendrogram(hclust(dist(heatmap_matrix)))
-  
-  description <- data.frame(cell_line = colnames(heatmap_matrix)) %>% 
+
+  description <- data.frame(cell_line = colnames(heatmap_matrix)) %>%
     left_join(cell_line_names) %>%
-    dplyr::select(cell_line,ORGAN) 
+    dplyr::select(cell_line,ORGAN)
   unique_organs <- cell_line_names$ORGAN %>% unique() %>% sort()
   colors =  getPalette(length(unique_organs)) #colorRamp2(seq(length(unique_organs), ))
   #col_fun = colorRamp2(unique_organs, colors)
   names(colors) = unique_organs
   ha = HeatmapAnnotation(df = description %>% select(ORGAN), col = list(ORGAN = colors))
 
-  Heatmap(heatmap_matrix, row_names_gp = grid::gpar(fontsize = 14), show_column_dend=F, show_row_dend=T, column_title = drug, 
+  Heatmap(heatmap_matrix, row_names_gp = grid::gpar(fontsize = 14), show_column_dend=F, show_row_dend=T, column_title = drug,
           show_column_names=F,show_heatmap_legend =F, row_dend_width = unit(4,'cm'),row_km = 10, bottom_annotation = ha)
-  
+
   #heatmap_matrix
 }
 
@@ -574,7 +574,7 @@ dasatinib_data$molecular_names %>% unique()
 mean_dasatinib_data <- dasatinib_data %>% group_by(cell_line, ORGAN) %>%
   dplyr::summarize(LRP = mean(LRP))
 
-ggplot(mean_dasatinib_data, aes(x = LRP, y = ORGAN, fill = ORGAN)) + geom_boxplot() 
+ggplot(mean_dasatinib_data, aes(x = LRP, y = ORGAN, fill = ORGAN)) + geom_boxplot()
 kidney_LRP<- mean_dasatinib_data %>% filter(ORGAN == 'KIDNEY')
 no_kidney_LRP<- mean_dasatinib_data %>% filter(ORGAN != 'KIDNEY')
 wilcox.test(kidney_LRP$LRP, no_kidney_LRP$LRP)
@@ -595,8 +595,8 @@ ABCB1_labels <- ABCB1_resistance %>%
 ggplot(ABCB1_resistance, aes(x = expression, y = LRP, color = ORGAN)) +
   geom_point(size=1) +
   #geom_smooth(se=F, linewidth=0.2, span=0.9) +
-  geom_text_repel(aes(x = expression, y = LRP, label=ORGAN)) + 
-  #geom_text_repel(data = ABCB1_labels, aes(x = expression, y = smooth, label=ORGAN)) + 
+  geom_text_repel(aes(x = expression, y = LRP, label=ORGAN)) +
+  #geom_text_repel(data = ABCB1_labels, aes(x = expression, y = smooth, label=ORGAN)) +
   theme_classic() +
   facet_grid(DRUG~molecular_names, scales='free') +
   theme_minimal()
@@ -610,7 +610,7 @@ ggplot(ABCB1_resistance %>% filter(!is.na(ORGAN)), aes(y = ORGAN, x = LRP, fill 
     axis.text= element_text(size=13),
     axis.title = element_text(size=15),
     legend.text = element_text(size=13)
-    
+
   ) +
   xlab('LRP score')
 
@@ -633,8 +633,8 @@ MYOM3_labels <- MYOM3_resistance %>%
 ggplot(MYOM3_resistance, aes(x = expression, y = LRP, color = ORGAN)) +
   geom_point(size=1) +
   geom_smooth(se=F, linewidth=0.2, span=0.9) +
-  geom_text_repel(aes(x = expression, y = LRP, label=ORGAN)) + 
-  #geom_text_repel(data = ABCB1_labels, aes(x = expression, y = smooth, label=ORGAN)) + 
+  geom_text_repel(aes(x = expression, y = LRP, label=ORGAN)) +
+  #geom_text_repel(data = ABCB1_labels, aes(x = expression, y = smooth, label=ORGAN)) +
   theme_classic() +
   facet_grid(DRUG~molecular_names, scales='free') +
   theme_minimal()
@@ -662,18 +662,18 @@ cell_perspective <- dat %>% filter(molecular_names %in% most_important_gene_name
 
 ord <- cell_perspective %>% group_by(molecular_names) %>%
   dplyr::summarize(meanabsLRP = sd(LRP)) %>%
-  arrange(desc(meanabsLRP)) 
+  arrange(desc(meanabsLRP))
 
 cell_perspective$molecular_names <- factor(cell_perspective$molecular_names, levels = ord$molecular_names)
-  
-  
+
+
 ggplot(cell_perspective, aes(x = molecular_names, y = LRP, group=cell_line, color = cell_line)) +
   geom_line(show.legend=F, linewidth = 0.7, alpha= 0.1) +
-  #geom_point(size=0.5, alpha=0.2) + 
+  #geom_point(size=0.5, alpha=0.2) +
   theme_minimal() +
   #scale_color_gradient(low='blue', high='red') +
   theme(axis.text.x = element_text(angle=90))
 
 ###############
-#compare 
+#compare
 #############

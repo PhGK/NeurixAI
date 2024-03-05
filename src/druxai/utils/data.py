@@ -88,8 +88,8 @@ class MyDataSet(Dataset):
             fold (_type_): _description_
             train_test (_type_): _description_
         """
-        if not os.path.exists('./results/train_test_splits/'):
-            os.makedirs('./results/train_test_splits/')
+        if not os.path.exists('../../results/train_test_splits/'):
+            os.makedirs('../../results/train_test_splits/')
 
         self.mode = train_test
         self.cell_ids_test, self.cell_lines_test = self.cell_ids_test_lists[
@@ -138,7 +138,7 @@ class MyDataSet(Dataset):
         names = pd.concat((test_names, train_names), axis=0)
         names['fold'] = fold
 
-        names.to_csv('./results/train_test_splits/train_test_names' + str(fold) + '.csv')
+        names.to_csv('../../results/train_test_splits/train_test_names' + str(fold) + '.csv')
 
     def generate_train_and_test_ids(self, cell_names):
         tc.manual_seed(0)

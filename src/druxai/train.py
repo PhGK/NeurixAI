@@ -13,7 +13,7 @@ from torch.optim.lr_scheduler import ExponentialLR, CosineAnnealingLR
 from sklearn.preprocessing import RobustScaler
 
 
-def train_test(model, ds, lr, nepochs, fold, device, PATH='./results/training/'):
+def train_test(model, ds, lr, nepochs, fold, device, PATH='../../results/training/'):
     if not os.path.exists(PATH):
         os.makedirs(PATH)
 
@@ -94,13 +94,12 @@ def train_test(model, ds, lr, nepochs, fold, device, PATH='./results/training/')
             if epoch % 1 == 0:
                 pd.concat(
                     prediction_frames,
-                    axis=0).to_csv(
-                    './results/training/' +
-                    '/prediction_frame_epoch' +
+                    axis=0).to_csv(os.path.join(PATH,
+                    'prediction_frame_epoch' +
                     str(epoch) +
-                    'fold' +
+                    '_fold' +
                     str(fold) +
-                    '.csv')
+                    '.csv'))
 
             print(epoch, 'testloss:', tc.tensor(testlosses).mean())
             ds.change_fold(fold, 'train')

@@ -11,7 +11,7 @@ print(sys.argv)
 def main():
     if not os.path.exists('./results/data/'):
         os.makedirs('./results/data/')
-    
+
     ds = MyDataSet(nsplits = 5)
     model_interaction = Interaction_Model(ds)
 
@@ -21,4 +21,3 @@ def main():
 if __name__ == '__main__':
     print('lets go')
     main()
-    
