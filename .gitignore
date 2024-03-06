@@ -13,3 +13,6 @@
 *.pyc
 *.pt
 *.csv
+
+# ignore prettier cache
+/node_modules/*
