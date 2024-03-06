@@ -1,5 +1,6 @@
+"""Module to run model directly in terminal."""
+
 import os
-import sys
 
 import torch as tc
 
@@ -7,10 +8,9 @@ from druxai.models.NN import Interaction_Model
 from druxai.utils.cross_validate import crossvalidate
 from druxai.utils.data import MyDataSet
 
-print(sys.argv)
-
 
 def main():
+    """_summary_."""
     if not os.path.exists("./results/data/"):
         os.makedirs("./results/data/")
 
@@ -22,5 +22,5 @@ def main():
 
 
 if __name__ == "__main__":
-    print("lets go")
+    """_summary_."""
     main()

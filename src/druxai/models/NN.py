@@ -1,3 +1,6 @@
+"""LRP and Interaction NN models."""
+
+import contextlib
 import copy
 
 import torch as tc
@@ -5,15 +8,40 @@ import torch.nn as nn
 
 
 class LRP_product(nn.Module):
+    """_summary_.
+
+    Args:
+        nn (_type_): _description_
+    """
+
     def __init__(self):
         super().__init__()
 
     def forward(self, f1, f2):
+        """_summary_.
+
+        Args:
+            f1 (_type_): _description_
+            f2 (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         self.f1, self.f2 = f1, f2
         self.y = f1 * f2
         return self.y
 
     def relprop(self, R):
+        """_summary_.
+
+        Args:
+            R (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         # these are not actually relevances -> only at multiplication at the end
 
         R1 = self.f1 * R / (self.y + 1e-9 * tc.sign(self.y))
@@ -24,6 +52,12 @@ class LRP_product(nn.Module):
 
 
 class LRP_Linear(nn.Module):
+    """_summary_.
+
+    Args:
+        nn (_type_): _description_
+    """
+
     def __init__(self, inp, outp, gamma=0.01, eps=1e-5):
         super().__init__()
         self.A_dict = {}
@@ -36,11 +70,29 @@ class LRP_Linear(nn.Module):
         self.iteration = None
 
     def forward(self, x):
+        """_summary_.
+
+        Args:
+            x (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         if not self.training:
             self.A_dict[self.iteration] = x.clone()
         return self.linear(x)
 
     def relprop(self, R):
+        """_summary_.
+
+        Args:
+            R (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         device = next(self.parameters()).device
 
         A = self.A_dict[self.iteration].clone()
@@ -59,15 +111,9 @@ class LRP_Linear(nn.Module):
             Y = self.forward(A).data
 
         sp = (
-            (Y > 0).float()
-            * R
-            / (zpp + zmm + self.eps * ((zpp + zmm == 0).float() + tc.sign(zpp + zmm)))
+            (Y > 0).float() * R / (zpp + zmm + self.eps * ((zpp + zmm == 0).float() + tc.sign(zpp + zmm)))
         ).data  # new version
-        sm = (
-            (Y < 0).float()
-            * R
-            / (zmp + zpm + self.eps * ((zmp + zpm == 0).float() + tc.sign(zmp + zpm)))
-        ).data
+        sm = ((Y < 0).float() * R / (zmp + zpm + self.eps * ((zmp + zpm == 0).float() + tc.sign(zmp + zpm)))).data
 
         (zpp * sp).sum().backward()
         cpp = Ap.grad
@@ -97,69 +143,114 @@ class LRP_Linear(nn.Module):
         return R_1 + R_2 + R_3 + R_4
 
     def newlayer(self, sign, no_bias=False):
+        """_summary_.
 
-        if sign == 1:
+        Args:
+            sign (_type_): _description_
+            no_bias (bool, optional): _description_. Defaults to False.
 
-            def rho(p):
-                return p + self.gamma * p.clamp(min=0)  # Replace 1e-9 by zero
-
-        else:
-
-            def rho(p):
-                return p + self.gamma * p.clamp(max=0)  # same here
+        Returns
+        -------
+            _type_: _description_
+        """
+        rho = (lambda p: p + self.gamma * p.clamp(min=0)) if sign == 1 else lambda p: p + self.gamma * p.clamp(max=0)
 
         layer_new = copy.deepcopy(self.linear)
 
-        try:
+        with contextlib.suppress(AttributeError):
             layer_new.weight = nn.Parameter(rho(self.linear.weight))
-        except AttributeError:
-            pass
 
-        try:
-            layer_new.bias = nn.Parameter(
-                self.linear.bias * 0 if no_bias else rho(self.linear.bias)
-            )
-        except AttributeError:
-            pass
+        with contextlib.suppress(AttributeError):
+            layer_new.bias = nn.Parameter(self.linear.bias * 0 if no_bias else rho(self.linear.bias))
 
         return layer_new
 
 
 class LRP_ReLU(nn.Module):
+    """_summary_.
+
+    Args:
+        nn (_type_): _description_
+    """
+
     def __init__(self):
         super().__init__()
         self.relu = nn.ReLU()
 
     def forward(self, x):
+        """_summary_.
+
+        Args:
+            x (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         return self.relu(x)
 
     def relprop(self, R):
+        """_summary_.
+
+        Args:
+            R (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         return R
 
 
 class LRP_DropOut(nn.Module):
+    """_summary_.
+
+    Args:
+        nn (_type_): _description_
+    """
+
     def __init__(self, p):
         super().__init__()
         self.dropout = nn.Dropout(p)
 
     def forward(self, x):
+        """_summary_.
+
+        Args:
+            x (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         return self.dropout(x)
 
     def relprop(self, R):
+        """_summary_.
+
+        Args:
+            R (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         return R
 
 
 class Model(nn.Module):
+    """_summary_.
+
+    Args:
+        nn (_type_): _description_
+    """
+
     def __init__(self, inp, outp, hidden, hidden_depth, dropout, gamma):
         super().__init__()
-        self.layers = nn.Sequential(
-            LRP_DropOut(p=0.0), LRP_Linear(inp, hidden, gamma=gamma), LRP_ReLU()
-        )
+        self.layers = nn.Sequential(LRP_DropOut(p=0.0), LRP_Linear(inp, hidden, gamma=gamma), LRP_ReLU())
         for i in range(hidden_depth):
             self.layers.add_module("dropout", LRP_DropOut(p=dropout))
-            self.layers.add_module(
-                "LRP_Linear" + str(i + 1), LRP_Linear(hidden, hidden, gamma=gamma)
-            )
+            self.layers.add_module("LRP_Linear" + str(i + 1), LRP_Linear(hidden, hidden, gamma=gamma))
             self.layers.add_module("LRP_ReLU" + str(i + 1), LRP_ReLU())
 
         self.layers.add_module("dropout", LRP_DropOut(p=dropout))
@@ -167,26 +258,27 @@ class Model(nn.Module):
         # self.layers.add_module('dropout', LRP_DropOut(p = dropout)) #new
 
     def forward(self, x):
+        """_summary_.
+
+        Args:
+            x (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         return self.layers.forward(x)
 
     def relprop(self, R):
-        assert not self.training, "relprop does not work during training time"
-        for module in self.layers[::-1]:
-            R = module.relprop(R)
-        return R
+        """_summary_.
 
+        Args:
+            R (_type_): _description_
 
-class LinearModel(nn.Module):
-    def __init__(self, inp, outp, hidden, hidden_depth, dropout, gamma):
-        super().__init__()
-        self.layers = nn.Sequential(
-            LRP_Linear(inp, outp, gamma=gamma), LRP_DropOut(p=dropout)
-        )
-
-    def forward(self, x):
-        return self.layers.forward(x)
-
-    def relprop(self, R):
+        Returns
+        -------
+            _type_: _description_
+        """
         assert not self.training, "relprop does not work during training time"
         for module in self.layers[::-1]:
             R = module.relprop(R)
@@ -194,6 +286,16 @@ class LinearModel(nn.Module):
 
 
 class Interaction_Model(nn.Module):
+    """_summary_.
+
+    Args:
+        nn (_type_): _description_
+
+    Returns
+    -------
+        _type_: _description_
+    """
+
     classname = "Interaction Model"
 
     def __init__(self, ds):
@@ -223,54 +325,61 @@ class Interaction_Model(nn.Module):
             gamma=0.01,
         )  # 4000
 
-        # self.last_nn = LRP_Linear(self.nfeatures_product,1)
-
-        self.product = LRP_product()
-
-        self.dropout = LRP_DropOut(p=0.05)
-
     def forward(self, drug, molecular):
+        """_summary_.
 
+        Args:
+            drug (_type_): _description_
+            molecular (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         intermediate1 = self.nn1(drug)
         intermediate2 = self.nn2(molecular)
 
         product = self.product.forward(intermediate1, intermediate2)
 
-        # outcome = self.last_nn(product)
-        outcome = product.mean(axis=1).unsqueeze(1)
-
-        return outcome
+        return product.mean(axis=1).unsqueeze(1)
 
     def get_product(self, drug, molecular):
+        """_summary_.
 
+        Args:
+            drug (_type_): _description_
+            molecular (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         intermediate1 = self.nn1(drug)
         intermediate2 = self.nn2(molecular)
 
-        product = self.product.forward(intermediate1, intermediate2)
-
-        return product
+        return self.product.forward(intermediate1, intermediate2)
 
     def relprop(self, R):
+        """_summary_.
+
+        Args:
+            R (_type_): _description_
+
+        Returns
+        -------
+            _type_: _description_
+        """
         device = R.device
         # product_relevance = self.last_nn.relprop(R)
 
         factor1_relevance, factor2_relevance = self.product.relprop(R)
 
-        input_relevance = tc.zeros(
-            R.shape[0], self.nfeatures1, self.nfeatures2, device=device
-        )
+        input_relevance = tc.zeros(R.shape[0], self.nfeatures1, self.nfeatures2, device=device)
 
         for i in range(self.nfeatures_product):
+            input1_relevance = self.nn1.relprop(factor1_relevance * tc.eye(self.nfeatures_product, device=device)[i])
+            input2_relevance = self.nn2.relprop(factor2_relevance * tc.eye(self.nfeatures_product, device=device)[i])
 
-            input1_relevance = self.nn1.relprop(
-                factor1_relevance * tc.eye(self.nfeatures_product, device=device)[i]
-            )
-            input2_relevance = self.nn2.relprop(
-                factor2_relevance * tc.eye(self.nfeatures_product, device=device)[i]
-            )
-
-            input_relevance += (
-                input1_relevance[:, :, None] * input2_relevance[:, None, :]
-            )
+            input_relevance += input1_relevance[:, :, None] * input2_relevance[:, None, :]
 
         return input_relevance

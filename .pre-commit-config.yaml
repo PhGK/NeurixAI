@@ -46,5 +46,8 @@ repos:
     rev: v0.3.0
     hooks:
       - id: ruff
-        types_or: [python, jupyter]
+        types_or: [python] # to include jupyter just add <,jupyter>
         args: [--fix, --exit-non-zero-on-fix]
+      # Run the formatter.
+      # - id: ruff-format
+      #  types_or: [python]

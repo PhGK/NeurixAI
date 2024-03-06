@@ -1,3 +1,5 @@
+"""Cross validation module."""
+
 import os
 
 import torch as tc
@@ -7,7 +9,7 @@ from utils.data import LRPSet
 
 
 def crossvalidate(model, ds, device, results_dir="../../results"):
-    """_summary_
+    """_summary_.
 
     Args:
         model (_type_): _description_
@@ -15,7 +17,6 @@ def crossvalidate(model, ds, device, results_dir="../../results"):
         device (_type_): _description_
         results_dir (str, optional): _description_. Defaults to "../../results".
     """
-
     os.makedirs(os.path.join(results_dir, "model_params"), exist_ok=True)
     tc.save(model.state_dict(), "./results/raw_params.pt")
 
@@ -27,7 +28,5 @@ def crossvalidate(model, ds, device, results_dir="../../results"):
             LRP_ds = LRPSet(n_splits=5)
             LRP_ds.change_fold(i, "train")  # just to calculate scaling parameters
             LRP_ds.change_fold(i, "test")
-            model.load_state_dict(
-                tc.load("./results/model_params/model_params_fold" + str(i) + ".pt")
-            )
+            model.load_state_dict(tc.load("./results/model_params/model_params_fold" + str(i) + ".pt"))
             calculate_one_side_LRP(model, LRP_ds, fold=i)
