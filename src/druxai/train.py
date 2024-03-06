@@ -65,7 +65,7 @@ def train_test(model, ds, lr, nepochs, fold, device, PATH="../../results/trainin
             else:
                 optimizer2.step()
 
-        if epoch in [5, 30, 50, 80, 100]:  # epoch%5==0:
+        if epoch in range(0, 20, 1):  # epoch%5==0:
             print("batch size: ", bs, optimizer1.param_groups[0]["lr"])
 
             ds.change_fold(fold, "test")
