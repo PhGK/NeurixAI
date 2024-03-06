@@ -1,6 +1,7 @@
+import copy
+
 import torch as tc
 import torch.nn as nn
-import copy
 
 
 class LRP_product(nn.Module):
@@ -24,7 +25,7 @@ class LRP_product(nn.Module):
 
 class LRP_Linear(nn.Module):
     def __init__(self, inp, outp, gamma=0.01, eps=1e-5):
-        super(LRP_Linear, self).__init__()
+        super().__init__()
         self.A_dict = {}
         self.linear = nn.Linear(inp, outp)
         nn.init.kaiming_uniform_(self.linear.weight)
@@ -57,10 +58,16 @@ class LRP_Linear(nn.Module):
         with tc.no_grad():
             Y = self.forward(A).data
 
-        sp = ((Y > 0).float() * R / (zpp + zmm + self.eps *
-              ((zpp + zmm == 0).float() + tc.sign(zpp + zmm)))).data  # new version
-        sm = ((Y < 0).float() * R / (zmp + zpm + self.eps *
-              ((zmp + zpm == 0).float() + tc.sign(zmp + zpm)))).data
+        sp = (
+            (Y > 0).float()
+            * R
+            / (zpp + zmm + self.eps * ((zpp + zmm == 0).float() + tc.sign(zpp + zmm)))
+        ).data  # new version
+        sm = (
+            (Y < 0).float()
+            * R
+            / (zmp + zpm + self.eps * ((zmp + zpm == 0).float() + tc.sign(zmp + zpm)))
+        ).data
 
         (zpp * sp).sum().backward()
         cpp = Ap.grad
@@ -92,9 +99,14 @@ class LRP_Linear(nn.Module):
     def newlayer(self, sign, no_bias=False):
 
         if sign == 1:
-            def rho(p): return p + self.gamma * p.clamp(min=0)  # Replace 1e-9 by zero
+
+            def rho(p):
+                return p + self.gamma * p.clamp(min=0)  # Replace 1e-9 by zero
+
         else:
-            def rho(p): return p + self.gamma * p.clamp(max=0)  # same here
+
+            def rho(p):
+                return p + self.gamma * p.clamp(max=0)  # same here
 
         layer_new = copy.deepcopy(self.linear)
 
@@ -105,9 +117,8 @@ class LRP_Linear(nn.Module):
 
         try:
             layer_new.bias = nn.Parameter(
-                self.linear.bias *
-                0 if no_bias else rho(
-                    self.linear.bias))
+                self.linear.bias * 0 if no_bias else rho(self.linear.bias)
+            )
         except AttributeError:
             pass
 
@@ -116,7 +127,7 @@ class LRP_Linear(nn.Module):
 
 class LRP_ReLU(nn.Module):
     def __init__(self):
-        super(LRP_ReLU, self).__init__()
+        super().__init__()
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -128,7 +139,7 @@ class LRP_ReLU(nn.Module):
 
 class LRP_DropOut(nn.Module):
     def __init__(self, p):
-        super(LRP_DropOut, self).__init__()
+        super().__init__()
         self.dropout = nn.Dropout(p)
 
     def forward(self, x):
@@ -140,26 +151,26 @@ class LRP_DropOut(nn.Module):
 
 class Model(nn.Module):
     def __init__(self, inp, outp, hidden, hidden_depth, dropout, gamma):
-        super(Model, self).__init__()
+        super().__init__()
         self.layers = nn.Sequential(
-            LRP_DropOut(
-                p=0.0), LRP_Linear(
-                inp, hidden, gamma=gamma), LRP_ReLU())
+            LRP_DropOut(p=0.0), LRP_Linear(inp, hidden, gamma=gamma), LRP_ReLU()
+        )
         for i in range(hidden_depth):
-            self.layers.add_module('dropout', LRP_DropOut(p=dropout))
-            self.layers.add_module('LRP_Linear' + str(i + 1),
-                                   LRP_Linear(hidden, hidden, gamma=gamma))
-            self.layers.add_module('LRP_ReLU' + str(i + 1), LRP_ReLU())
+            self.layers.add_module("dropout", LRP_DropOut(p=dropout))
+            self.layers.add_module(
+                "LRP_Linear" + str(i + 1), LRP_Linear(hidden, hidden, gamma=gamma)
+            )
+            self.layers.add_module("LRP_ReLU" + str(i + 1), LRP_ReLU())
 
-        self.layers.add_module('dropout', LRP_DropOut(p=dropout))
-        self.layers.add_module('LRP_Linear_last', LRP_Linear(hidden, outp, gamma=gamma))
+        self.layers.add_module("dropout", LRP_DropOut(p=dropout))
+        self.layers.add_module("LRP_Linear_last", LRP_Linear(hidden, outp, gamma=gamma))
         # self.layers.add_module('dropout', LRP_DropOut(p = dropout)) #new
 
     def forward(self, x):
         return self.layers.forward(x)
 
     def relprop(self, R):
-        assert not self.training, 'relprop does not work during training time'
+        assert not self.training, "relprop does not work during training time"
         for module in self.layers[::-1]:
             R = module.relprop(R)
         return R
@@ -167,26 +178,33 @@ class Model(nn.Module):
 
 class LinearModel(nn.Module):
     def __init__(self, inp, outp, hidden, hidden_depth, dropout, gamma):
-        super(LinearModel, self).__init__()
-        self.layers = nn.Sequential(LRP_Linear(inp, outp, gamma=gamma), LRP_DropOut(p=dropout))
+        super().__init__()
+        self.layers = nn.Sequential(
+            LRP_Linear(inp, outp, gamma=gamma), LRP_DropOut(p=dropout)
+        )
 
     def forward(self, x):
         return self.layers.forward(x)
 
     def relprop(self, R):
-        assert not self.training, 'relprop does not work during training time'
+        assert not self.training, "relprop does not work during training time"
         for module in self.layers[::-1]:
             R = module.relprop(R)
         return R
 
 
 class Interaction_Model(nn.Module):
-    classname = 'Interaction Model'
+    classname = "Interaction Model"
 
     def __init__(self, ds):
         super().__init__()
 
-        self.nfeatures1, self.nfeatures2, self.nfeatures_product, self.nfeatures_out = ds.ndrug_features, ds.nmolecular_features, 1000, 1  # 1000
+        self.nfeatures1, self.nfeatures2, self.nfeatures_product, self.nfeatures_out = (
+            ds.ndrug_features,
+            ds.nmolecular_features,
+            1000,
+            1,
+        )  # 1000
 
         self.nn1 = Model(
             self.nfeatures1,
@@ -194,14 +212,16 @@ class Interaction_Model(nn.Module):
             5000,
             hidden_depth=0,
             dropout=0.05,
-            gamma=0.01)  # 2000
+            gamma=0.01,
+        )  # 2000
         self.nn2 = Model(
             self.nfeatures2,
             self.nfeatures_product,
             10000,
             hidden_depth=0,
             dropout=0.05,
-            gamma=0.01)  # 4000
+            gamma=0.01,
+        )  # 4000
 
         # self.last_nn = LRP_Linear(self.nfeatures_product,1)
 
@@ -236,21 +256,21 @@ class Interaction_Model(nn.Module):
 
         factor1_relevance, factor2_relevance = self.product.relprop(R)
 
-        input_relevance = tc.zeros(R.shape[0], self.nfeatures1, self.nfeatures2, device=device)
+        input_relevance = tc.zeros(
+            R.shape[0], self.nfeatures1, self.nfeatures2, device=device
+        )
 
         for i in range(self.nfeatures_product):
 
             input1_relevance = self.nn1.relprop(
-                factor1_relevance *
-                tc.eye(
-                    self.nfeatures_product,
-                    device=device)[i])
+                factor1_relevance * tc.eye(self.nfeatures_product, device=device)[i]
+            )
             input2_relevance = self.nn2.relprop(
-                factor2_relevance *
-                tc.eye(
-                    self.nfeatures_product,
-                    device=device)[i])
+                factor2_relevance * tc.eye(self.nfeatures_product, device=device)[i]
+            )
 
-            input_relevance += input1_relevance[:, :, None] * input2_relevance[:, None, :]
+            input_relevance += (
+                input1_relevance[:, :, None] * input2_relevance[:, None, :]
+            )
 
         return input_relevance

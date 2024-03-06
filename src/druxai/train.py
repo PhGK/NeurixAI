@@ -1,23 +1,21 @@
-from torch.utils.data import Dataset, DataLoader
-from torch.optim import SGD, Adam
-import torch.nn as nn
-import torch as tc
-from torch.nn.utils import clip_grad_norm_, clip_grad_value_
-from tqdm import tqdm
-import numpy as np
 import os
+
+import numpy as np
 import pandas as pd
-from models.NN import Interaction_Model
-import gc
-from torch.optim.lr_scheduler import ExponentialLR, CosineAnnealingLR
-from sklearn.preprocessing import RobustScaler
+import torch as tc
+import torch.nn as nn
+from torch.nn.utils import clip_grad_norm_
+from torch.optim import SGD
+from torch.optim.lr_scheduler import ExponentialLR
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 
-def train_test(model, ds, lr, nepochs, fold, device, PATH='../../results/training/'):
+def train_test(model, ds, lr, nepochs, fold, device, PATH="../../results/training/"):
     if not os.path.exists(PATH):
         os.makedirs(PATH)
 
-    print('fold: ', fold)
+    print("fold: ", fold)
 
     model.train().to(device)
 
@@ -25,10 +23,12 @@ def train_test(model, ds, lr, nepochs, fold, device, PATH='../../results/trainin
     optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr=lr, weight_decay=1e-5)
     criterion = nn.HuberLoss()
 
-    scheduler1 = ExponentialLR(optimizer1, gamma=0.9)  # gamma 0.9 #0.95 only for 100 epochs
+    scheduler1 = ExponentialLR(
+        optimizer1, gamma=0.9
+    )  # gamma 0.9 #0.95 only for 100 epochs
     scheduler2 = ExponentialLR(optimizer2, gamma=0.9)  # gamma 0.9
 
-    ds.change_fold(fold, 'train')
+    ds.change_fold(fold, "train")
     for epoch in range(1, nepochs + 1):  # been without +1
 
         bs = 128
@@ -37,12 +37,18 @@ def train_test(model, ds, lr, nepochs, fold, device, PATH='../../results/trainin
         it = 0
         model.train()
         for drug, molecular, outcome, idx in tqdm(dl):
-            assert ds.mode == 'train', 'training on ' + ds.mode + ' dataset is not possible'
+            assert ds.mode == "train", (
+                "training on " + ds.mode + " dataset is not possible"
+            )
             it += 1
             if it > 50:
                 pass
 
-            drug, molecular, outcome = drug.to(device), molecular.to(device), outcome.to(device)
+            drug, molecular, outcome = (
+                drug.to(device),
+                molecular.to(device),
+                outcome.to(device),
+            )
 
             optimizer1.zero_grad()
             optimizer2.zero_grad()
@@ -60,49 +66,66 @@ def train_test(model, ds, lr, nepochs, fold, device, PATH='../../results/trainin
                 optimizer2.step()
 
         if epoch in [5, 30, 50, 80, 100]:  # epoch%5==0:
-            print('batch size: ', bs, optimizer1.param_groups[0]['lr'])
+            print("batch size: ", bs, optimizer1.param_groups[0]["lr"])
 
-            ds.change_fold(fold, 'test')
-            assert ds.mode == 'test', 'testing on ' + ds.mode + ' dataset is not possible'
+            ds.change_fold(fold, "test")
+            assert ds.mode == "test", (
+                "testing on " + ds.mode + " dataset is not possible"
+            )
 
-            dl_test = DataLoader(ds, batch_size=1000, shuffle=False, num_workers=8, pin_memory=True)
+            dl_test = DataLoader(
+                ds, batch_size=1000, shuffle=False, num_workers=8, pin_memory=True
+            )
 
             testlosses = []
             prediction_frames = []
             model.eval()
             for drug, molecular, outcome, idx in tqdm(dl_test):
 
-                drug, molecular, outcome = drug.to(device), molecular.to(device), outcome.to(device)
+                drug, molecular, outcome = (
+                    drug.to(device),
+                    molecular.to(device),
+                    outcome.to(device),
+                )
 
                 with tc.no_grad():
                     prediction = model.forward(drug, molecular)
 
                     testlosses.append(criterion(outcome, prediction))
 
-                    batch_result = pd.DataFrame({'ground_truth': outcome.squeeze(
-                    ).cpu().numpy(), 'prediction': prediction.squeeze().cpu().numpy()})
+                    batch_result = pd.DataFrame(
+                        {
+                            "ground_truth": outcome.squeeze().cpu().numpy(),
+                            "prediction": prediction.squeeze().cpu().numpy(),
+                        }
+                    )
 
-                    batch_result['cells'] = np.array(
-                        ds.current_cases.loc[np.array(idx), 'cell_line'])
-                    batch_result['drugs'] = np.array(ds.current_cases.loc[np.array(idx), 'DRUG'])
-                    batch_result['fold'] = fold
-                    batch_result['epoch'] = epoch
+                    batch_result["cells"] = np.array(
+                        ds.current_cases.loc[np.array(idx), "cell_line"]
+                    )
+                    batch_result["drugs"] = np.array(
+                        ds.current_cases.loc[np.array(idx), "DRUG"]
+                    )
+                    batch_result["fold"] = fold
+                    batch_result["epoch"] = epoch
 
                     prediction_frames.append(batch_result)
                 # break
 
             if epoch % 1 == 0:
-                pd.concat(
-                    prediction_frames,
-                    axis=0).to_csv(os.path.join(PATH,
-                    'prediction_frame_epoch' +
-                    str(epoch) +
-                    '_fold' +
-                    str(fold) +
-                    '.csv'))
+                pd.concat(prediction_frames, axis=0).to_csv(
+                    os.path.join(
+                        PATH,
+                        "prediction_frame_epoch"
+                        + str(epoch)
+                        + "_fold"
+                        + str(fold)
+                        + ".csv",
+                    )
+                )
 
-            print(epoch, 'testloss:', tc.tensor(testlosses).mean())
-            ds.change_fold(fold, 'train')
+            print(epoch, "testloss:", tc.tensor(testlosses).mean())
+            ds.change_fold(fold, "train")
 
         scheduler1.step()
         scheduler2.step()
