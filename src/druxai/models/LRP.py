@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import torch as tc
 import torch.nn as nn
-# from NN import Interaction_Model
 from models.NN import LRP_Linear
 from torch.utils.data import DataLoader
 from tqdm import tqdm
