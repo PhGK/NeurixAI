@@ -47,3 +47,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+
+# Ignore wandb stuff
+wandb/
+
+papers/
