@@ -1,6 +1,5 @@
 """Compound Data Module."""
 
-import logging
 import os
 
 import torch as tc
@@ -9,6 +8,8 @@ from torch.utils.data import Dataset
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
+
+from druxai._logging import logger
 
 
 class MyDataSet(Dataset):
@@ -22,9 +23,6 @@ class MyDataSet(Dataset):
         self.file_path = file_path
         self.splits = n_splits
         self.results_dir = results_dir
-
-        # Initialize logger
-        self.logger = self._setup_logger()
 
         self.cases = pd.read_csv(
             os.path.join(file_path, "auc_secondary_screen_prediction_targets.csv"),
@@ -51,12 +49,12 @@ class MyDataSet(Dataset):
         self.nmolecular_features = self.molecular_data.shape[1]
         self.ncelltypes = self.cell_line.shape[0]
 
-        self.logger.info(
+        logger.info(
             f"{self.nmolecular_features} molecular features, "
             f"{self.ncelltypes} celltypes, "
             f"{self.ndrug_features} drug_features"
         )
-        self.logger.info(f"{self.unique_drugs.shape[0]} drugs and {unique_cell_lines.shape[0]} cell lines")
+        logger.info(f"{self.unique_drugs.shape[0]} drugs and {unique_cell_lines.shape[0]} cell lines")
 
     def __getitem__(self, idx):
         """_summary_.
@@ -95,30 +93,6 @@ class MyDataSet(Dataset):
             _type_: _description_
         """
         return self.current_cases.shape[0]
-
-    def _setup_logger(self):
-        """_summary_.
-
-        Returns
-        -------
-            _type_: _description_
-        """
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.INFO)
-
-        # Create file handler which logs messages to a file
-        log_file = os.path.join("../../logs", "logfile.log")
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logging.INFO)
-
-        # Create formatter and add it to the file handler
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        file_handler.setFormatter(formatter)
-
-        # Add file handler to the logger
-        logger.addHandler(file_handler)
-
-        return logger
 
     def change_fold(self, fold, train_test):
         """Set fold and check if in train or test set.
