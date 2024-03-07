@@ -325,6 +325,10 @@ class Interaction_Model(nn.Module):
             gamma=0.01,
         )  # 4000
 
+        self.product = LRP_product()
+
+        self.dropout = LRP_DropOut(p=0.05)
+
     def forward(self, drug, molecular):
         """_summary_.
 
