@@ -34,3 +34,9 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 <img width="576" alt="Bildschirmfoto 2024-03-05 um 08 16 37" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/4287677e-14ec-4557-90b4-670390d9e1f3">
 <img width="854" alt="Bildschirmfoto 2024-03-05 um 08 56 47" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/e71a14c2-ed31-4804-9daa-a957a5025734">
 <img width="743" alt="Bildschirmfoto 2024-03-05 um 09 13 44" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/e9d50d4a-d478-44a0-b943-8c01ce687586">
+
+### Additional Data Resources
+
+- [Chemistry Library](https://www-library.ch.cam.ac.uk/list-useful-databases)
+- [CTR-DB, an omnibus for patient-derived gene expression signatures correlated with cancer drug response](https://pubmed.ncbi.nlm.nih.gov/34570230/)
+- [CTR-DB, an omnibus for patient-derived gene expression signatures correlated with cancer drug response](https://academic.oup.com/nar/article/50/D1/D1164/6389514)
