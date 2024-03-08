@@ -1,4 +1,4 @@
-"""Training Model to train NN."""
+"""Training script. To run it do: $ python train.py --batch_size=32."""
 
 import os
 
@@ -13,61 +13,113 @@ from tqdm import tqdm
 
 import pandas as pd
 
+from druxai._logging import logger
+from druxai.models.NN import Interaction_Model
+from druxai.utils.data import MyDataSet
 from druxai.utils.dataframe_utils import create_batch_result
 
+# -----------------------------------------------------------------------------
+# training params
+batch_size = 512
+learning_rate = 0.01
+fold = 1
+epochs = 2
+train_on_subset = True
+seed = 1337
+grad_clip = 1.0
+on_subset = False
+device = torch.device("mps")  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', 'mps' etc.
+PATH = "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/results/training"
+# wandb logging
+wandb_log = False
+wandb_project_name = "druxai"
+wandb_run_name = "druxai-run1"
+__spec__ = None
+# -----------------------------------------------------------------------------
+config_keys = [k for k, v in globals().items() if not k.startswith("_") and isinstance(v, (int, float, bool, str))]
+with open("/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/src/druxai/utils/configurator.py") as f:
+    exec(f.read())  # overrides from command line or config file
+config = {k: globals()[k] for k in config_keys}  # will be useful for logging
+# -----------------------------------------------------------------------------
 
-def train_model(model, ds, lr, nepochs, fold, device, PATH="../../results/training/", wandb_log=False, on_subset=False):
-    """Train model.
+
+@torch.no_grad()
+def evaluate_model(model, ds, dl_test, fold, epoch, PATH, epochs):
+    """Evaluate Model after each epoch of training and saves final prediction for last epoch.
 
     Args:
         model (_type_): _description_
-        ds (_type_): Dataset
-        lr (_type_): _description_
-        nepochs (_type_): _description_
+        ds (_type_): _description_
+        dl_test (_type_): _description_
         fold (_type_): _description_
-        device (_type_): _description_
-        PATH (str, optional): _description_. Defaults to "../../results/training/".
-        wandb_log (bool, optional): _description_. Defaults to False.
-        on_subset (bool, optional): Whether to train on subset for fast testing. Defaults to False.
+        epoch (_type_): _description_
+        PATH (_type_): _description_
 
     Returns
     -------
-        _type_: _description_
+        avg_test_loss: average test loss for batch
     """
+    model.eval()
+    avg_test_loss = 0
+    prediction_frames = []
+
+    for drug, molecular, outcome, idx in tqdm(dl_test):
+        drug, molecular, outcome = drug.to(device), molecular.to(device), outcome.to(device)
+        prediction = model(drug, molecular)
+        loss = nn.HuberLoss()(outcome, prediction)
+
+        batch_result = create_batch_result(outcome, prediction, ds, idx, fold, epoch)
+        prediction_frames.append(batch_result)
+        avg_test_loss += loss.item() / len(dl_test)
+
+        if epoch == epochs:
+            pd.concat(prediction_frames, axis=0).to_csv(os.path.join(PATH, "prediction.csv"))
+
+    return avg_test_loss
+
+
+def train():
+    """End-to-End Training of Druxai Network."""
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+
     if not os.path.exists(PATH):
         os.makedirs(PATH)
 
     # Initialize wandb run
     if wandb_log:
         wandb.init(
-            project="druxai",
-            config={
-                "learning_rate": lr,
-                "epochs": nepochs,
-            },
+            project=wandb_project_name,
+            name=wandb_run_name,
+            config=config,
         )
 
+    logger.info("loading dataset")
+    # Hard coded for now, should be improved in the future
+    ds = MyDataSet(file_path="../../data/preprocessed", results_dir="../../results", n_splits=5)
+    logger.info("finished loading dataset")
+    model = Interaction_Model(ds)
     model.train().to(device)
+    logger.info("model mapped to device")
 
-    optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr=lr, weight_decay=1e-5)
-    optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr=lr, weight_decay=1e-5)
+    optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
+    optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
     criterion = nn.HuberLoss()
 
     scheduler1 = ExponentialLR(optimizer1, gamma=0.9)  # gamma 0.9 #0.95 only for 100 epochs
     scheduler2 = ExponentialLR(optimizer2, gamma=0.9)  # gamma 0.9
 
     ds.change_fold(fold, "train")
-    for epoch in range(1, nepochs + 1):  # been without +1
-        bs = 128
+    for epoch in range(1, epochs + 1):  # been without +1
 
         # Small subset for testing
         if on_subset:
             subset_indices = range(0, 5000)
             subset_dataset = Subset(ds, subset_indices)
-            dl = DataLoader(subset_dataset, batch_size=bs, shuffle=True, num_workers=8, pin_memory=True)
+            dl = DataLoader(subset_dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
         else:
-            dl = DataLoader(ds, batch_size=bs, shuffle=True, num_workers=8, pin_memory=True)
+            dl = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
         model.train()
         train_loss = 0.0
@@ -90,7 +142,7 @@ def train_model(model, ds, lr, nepochs, fold, device, PATH="../../results/traini
             train_loss += loss.item() * drug.size(0)
 
             loss.backward()
-            clip_grad_norm_(model.parameters(), 1.0)
+            clip_grad_norm_(model.parameters(), grad_clip)
 
             # Randomly select optimizer
             selected_optimizer = optimizer1 if torch.rand(1) < 0.5 else optimizer2
@@ -100,7 +152,7 @@ def train_model(model, ds, lr, nepochs, fold, device, PATH="../../results/traini
         assert ds.mode == "test", "testing on " + ds.mode + " dataset is not possible"
 
         dl_test = DataLoader(ds, batch_size=1000, shuffle=False, num_workers=8, pin_memory=True)
-        avg_test_loss = evaluate_model(model, ds, dl_test, device, fold, epoch, PATH, nepochs)
+        avg_test_loss = evaluate_model(model, ds, dl_test, device, fold, epoch, PATH, epochs)
 
         if wandb_log:
             wandb.log({"epoch": epoch, "epoch loss": train_loss, "test_loss": avg_test_loss})
@@ -114,40 +166,6 @@ def train_model(model, ds, lr, nepochs, fold, device, PATH="../../results/traini
     if wandb_log:
         wandb.finish()
 
-    return model
 
-
-@torch.no_grad()
-def evaluate_model(model, ds, dl_test, device, fold, epoch, PATH, nepochs):
-    """Evaluate Model after each epoch of training and saves final prediction for last epoch.
-
-    Args:
-        model (_type_): _description_
-        ds (_type_): _description_
-        dl_test (_type_): _description_
-        device (_type_): _description_
-        fold (_type_): _description_
-        epoch (_type_): _description_
-        PATH (_type_): _description_
-
-    Returns
-    -------
-        avg_test_loss: average test loss for batch
-    """
-    model.eval()
-    avg_test_loss = 0
-    prediction_frames = []
-
-    for drug, molecular, outcome, idx in tqdm(dl_test):
-        drug, molecular, outcome = drug.to(device), molecular.to(device), outcome.to(device)
-        prediction = model(drug, molecular)
-        loss = nn.HuberLoss()(outcome, prediction)
-
-        batch_result = create_batch_result(outcome, prediction, ds, idx, fold, epoch)
-        prediction_frames.append(batch_result)
-        avg_test_loss += loss.item() / len(dl_test)
-
-        if epoch == nepochs:
-            pd.concat(prediction_frames, axis=0).to_csv(os.path.join(PATH, "prediction.csv"))
-
-    return avg_test_loss
+if __name__ == "__main__":
+    train()
