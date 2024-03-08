@@ -13,7 +13,6 @@ from tqdm import tqdm
 
 import pandas as pd
 
-from druxai._logging import logger
 from druxai.models.NN import Interaction_Model
 from druxai.utils.data import MyDataSet
 from druxai.utils.dataframe_utils import create_batch_result
@@ -94,13 +93,10 @@ def train():
             config=config,
         )
 
-    logger.info("loading dataset")
     # Hard coded for now, should be improved in the future
     ds = MyDataSet(file_path="../../data/preprocessed", results_dir="../../results", n_splits=5)
-    logger.info("finished loading dataset")
     model = Interaction_Model(ds)
     model.train().to(device)
-    logger.info("model mapped to device")
 
     optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
     optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
