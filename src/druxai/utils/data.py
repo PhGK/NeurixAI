@@ -1,7 +1,7 @@
 """Compound Data Module."""
 
 import os
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import torch
 from torch.utils.data import Dataset
@@ -24,7 +24,7 @@ class MyDataSet(Dataset):
         self.file_path = file_path
         self.splits = n_splits
         self.results_dir = results_dir
-
+        self.selected_dataset = "train"
         self.cases = pd.read_csv(
             os.path.join(file_path, "auc_secondary_screen_prediction_targets.csv"),
             index_col=0,
@@ -46,7 +46,7 @@ class MyDataSet(Dataset):
         self.cell_line = np.array(self.cases["cell_line"].drop_duplicates().sort_values())
         self.ncelltypes = self.cell_line.shape[0]
 
-        self.cell_ids_test_lists, self.cell_lines_test_lists = self.generate_train_and_test_ids()
+        self.train_test_ids_tensor_list, self.train_test_cell_names_list = self.generate_train_and_test_ids()
 
         logger.info(
             "%d molecular features, %d unique drugs, %d unique cell lines",
@@ -66,16 +66,31 @@ class MyDataSet(Dataset):
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]: A tuple containing the drug features,
                 molecular data, target outcome, and index of the sample.
         """
-        case = self.current_cases.loc[idx, :]
-        current_drugname = case["DRUG"]
-        current_model_id = case["cell_line"]
+        if self.selected_dataset == "train":
+            self.current_molecular_data_tensor = self.current_molecular_data_tensor_train
+            self.current_molecular_data = self.current_molecular_data_train_pd
+            self.current_cases = self.cases_train.reset_index(drop=True)
+        elif self.selected_dataset == "test":
+            self.current_molecular_data_tensor = self.current_molecular_data_tensor_test
+            self.current_molecular_data = self.current_molecular_data_test_pd
+            self.current_cases = self.cases_test.reset_index(drop=True)
+        elif self.selected_dataset == "val":
+            self.current_molecular_data_tensor = self.current_molecular_data_tensor_val
+            self.current_molecular_data = self.current_molecular_data_val_pd
+            self.current_cases = self.cases_val.reset_index(drop=True)
+        else:
+            raise ValueError("Invalid value for selected_dataset.")
 
-        current_drug_onehot = self.drug_onehot_tensor[:, self.unique_drugs_array == current_drugname].squeeze()
-        current_molecular_data = self.current_molecular_data_tensor[
-            torch.tensor(self.current_molecular_data.index == current_model_id).squeeze(),
-            :,
-        ].squeeze()
+        case = self.current_cases.loc[idx, :]
+        drugnames = case["DRUG"]
+        cell_line_names = case["cell_line"]
+
+        current_drug_onehot = self.drug_onehot_tensor[:, self.unique_drugs_array == drugnames].squeeze()
         current_outcome = torch.tensor(case["auc_per_drug"]).float()
+
+        # TODO: Check that return isnt empty when entire mask is false.
+        mask = torch.tensor(self.current_molecular_data.index == cell_line_names).squeeze()
+        current_molecular_data = self.current_molecular_data_tensor[mask, :].squeeze()
 
         return (current_drug_onehot, current_molecular_data, current_outcome.unsqueeze(0), idx)
 
@@ -86,7 +101,13 @@ class MyDataSet(Dataset):
         -------
             _type_: _description_
         """
-        return self.current_cases.shape[0]
+        if self.selected_dataset == "train":
+            return len(self.cases_train.reset_index(drop=True))
+        if self.selected_dataset == "test":
+            return len(self.cases_test.reset_index(drop=True))
+        if self.selected_dataset == "val":
+            return len(self.cases_val.reset_index(drop=True))
+        raise ValueError("No length to return, since selected_dataset is not specified.")
 
     def change_fold(self, fold, train_test):
         """Set fold and check if in train or test set.
@@ -100,16 +121,21 @@ class MyDataSet(Dataset):
 
         self.mode = train_test
         self.cell_ids_test, self.cell_lines_test = (
-            self.cell_ids_test_lists[fold],
-            self.cell_lines_test_lists[fold],
+            self.train_test_ids_tensor_list[fold],
+            self.train_test_cell_names_list[fold],
         )
 
+        # Find cell ids for train and test sets
         self.cell_ids_train = np.setdiff1d(np.arange(self.molecular_data.shape[0]), self.cell_ids_test)
+
+        # Only use cell lines for which we have molecular data
         self.cell_lines_train = self.molecular_data.index[self.cell_ids_train]
 
+        # Find for the cell line in training or test set all corresponding experiments (can be multiple per cell line)
         self.cases_train = self.cases[np.isin(self.cases["cell_line"], self.cell_lines_train)]
         self.cases_test = self.cases[np.isin(self.cases["cell_line"], self.cell_lines_test)]
 
+        # TODO: Drop duplicates again (I think unnecessary since we handeld duplicates before already during import)
         self.cell_lines_train_filtered = np.array(self.cases_train["cell_line"].drop_duplicates())
         self.cell_lines_test_filtered = np.array(self.cases_test["cell_line"].drop_duplicates())
 
@@ -162,27 +188,29 @@ class MyDataSet(Dataset):
         all_ids = torch.randperm(self.molecular_data.index.shape[0])
         # Splits data into self.splits chunks
         id_split = np.array_split(all_ids, self.splits)
-        logger.info(id_split)
         return id_split, [self.molecular_data.index[current] for current in id_split]
 
     def generate_train_val_test_ids(
-        self, train_split: float = 0.7, val_split: float = 0.2, test_split: float = 0.1
-    ) -> Tuple[List[torch.Tensor], List[List[Any]]]:
+        self, train_split: float = 0.7, val_split: float = 0.2, test_split: float = 0.1, seed: int = None
+    ) -> dict:
         """Generate train, validation, and test IDs for given cell-line names.
 
         Args:
             train_split (float): The percentage of data to allocate to the training set.
             val_split (float): The percentage of data to allocate to the validation set.
             test_split (float): The percentage of data to allocate to the test set.
+            seed (int): The seed value for the random number generator.
 
         Returns
         -------
-            Tuple[List[torch.Tensor], List[List[Any]]]: Tuple containing the generated train, validation, and test IDs.
-                The first element of the tuple is a list of PyTorch tensors containing train, validation, and test IDs,
-                and the second element is a list of lists containing corresponding cell names for each ID split.
+            dict: Dictionary containing the generated train, validation, and test IDs along with their names.
         """
         # Ensure split percentages sum to 1.0
         assert abs(train_split + val_split + test_split - 1.0) < 1e-10, "Split percentages must sum to 1.0"
+
+        # Set seed for reproducibility
+        if seed is not None:
+            torch.manual_seed(seed)
 
         # Generate random permutation of indices
         num_samples = len(self.molecular_data.index)
@@ -191,7 +219,6 @@ class MyDataSet(Dataset):
         # Calculate number of samples for each split
         train_count = int(num_samples * train_split)
         val_count = int(num_samples * val_split)
-        # test_count = num_samples - train_count - val_count
 
         # Split the indices into train, validation, and test sets
         train_ids = all_ids[:train_count]
@@ -203,29 +230,86 @@ class MyDataSet(Dataset):
         val_names = [np.array(self.molecular_data.index)[i] for i in val_ids]
         test_names = [np.array(self.molecular_data.index)[i] for i in test_ids]
 
-        # Return a tuple containing train, validation, and test IDs and names
-        return [train_ids, val_ids, test_ids], [train_names, val_names, test_names]
+        # Return a dictionary containing train, validation, and test IDs and names
+        return {
+            "train_ids": train_ids,
+            "val_ids": val_ids,
+            "test_ids": test_ids,
+            "train_names": train_names,
+            "val_names": val_names,
+            "test_names": test_names,
+        }
 
-    def get_drug_vector(self, current_drugname):
+    def preprocess_train_val_test(self, ids: Dict[str, list]):
+        """Preprocess training, validation, and test datasets.
+
+        Extracts and Scales train, val and test data based on provided IDs.
+
+        Args:
+            ids (Dict[str, list]): Dictionary containing train, test, and val cell line names.
+
+        Returns
+        -------
+            None
+        """
+        # Only use cell lines for which we have molecular data
+        self.cell_lines_train = self.molecular_data.loc[ids["train_names"]]
+        self.cell_lines_test = self.molecular_data.loc[ids["test_names"]]
+        self.cell_lines_val = self.molecular_data.loc[ids["val_names"]]
+
+        # Find for the cell line in training or test set all corresponding experiments (can be multiple per cell line)
+        self.cases_train = self.cases[self.cases["cell_line"].isin(self.cell_lines_train.index)]
+        self.cases_test = self.cases[self.cases["cell_line"].isin(self.cell_lines_test.index)]
+        self.cases_val = self.cases[self.cases["cell_line"].isin(self.cell_lines_val.index)]
+
+        # Filtered cell lines
+        self.cell_lines_train_filtered = self.cases_train["cell_line"].unique()
+        self.cell_lines_test_filtered = self.cases_test["cell_line"].unique()
+        self.cell_lines_val_filtered = self.cases_val["cell_line"].unique()
+
+        # Create scaler and fit it on training data
+        self.scaler = StandardScaler().fit(self.molecular_data.loc[self.cell_lines_train_filtered])
+
+        # Transform molecular data for train, test, and val sets using the fitted scaler; and save as pd Dataframe
+        self.current_molecular_data_train_pd = pd.DataFrame(
+            self.scaler.transform(self.molecular_data.loc[self.cell_lines_train_filtered]),
+            index=self.cell_lines_train_filtered,
+            columns=self.molecular_data.columns,
+        )
+        self.current_molecular_data_test_pd = pd.DataFrame(
+            self.scaler.transform(self.molecular_data.loc[self.cell_lines_test_filtered]),
+            index=self.cell_lines_test_filtered,
+            columns=self.molecular_data.columns,
+        )
+        self.current_molecular_data_val_pd = pd.DataFrame(
+            self.scaler.transform(self.molecular_data.loc[self.cell_lines_val_filtered]),
+            index=self.cell_lines_val_filtered,
+            columns=self.molecular_data.columns,
+        )
+
+        # Transform dataframes to torch tensor
+        self.current_molecular_data_tensor_train = torch.tensor(np.array(self.current_molecular_data_train_pd)).float()
+        self.current_molecular_data_tensor_test = torch.tensor(np.array(self.current_molecular_data_test_pd)).float()
+        self.current_molecular_data_tensor_val = torch.tensor(np.array(self.current_molecular_data_val_pd)).float()
+
+    def get_drug_vector(self, drugnames):
         """_summary_.
 
         Args:
-            current_drugname (_type_): _description_
+            drugnames (_type_): _description_
 
         Returns
         -------
             _type_: _description_
         """
-        current_drug_embedding = self.drug_embeddings_tensor[
-            :, current_drugname == self.drug_embeddings.columns
-        ].squeeze()
+        current_drug_embedding = self.drug_embeddings_tensor[:, drugnames == self.drug_embeddings.columns].squeeze()
         current_drug_fingerprint = (
-            self.drug_fingerprints_tensor[:, self.drug_fingerprints.columns == current_drugname].squeeze()
-            if current_drugname in self.drug_fingerprints.columns
+            self.drug_fingerprints_tensor[:, self.drug_fingerprints.columns == drugnames].squeeze()
+            if drugnames in self.drug_fingerprints.columns
             else torch.zeros(self.drug_fingerprints_tensor.shape[1]).squeeze()
         )
 
-        current_drug_onehot = self.drug_onehot_tensor[:, self.unique_drugs_array == current_drugname].squeeze()
+        current_drug_onehot = self.drug_onehot_tensor[:, self.unique_drugs_array == drugnames].squeeze()
 
         return torch.cat(
             (current_drug_embedding, current_drug_fingerprint, current_drug_onehot),
