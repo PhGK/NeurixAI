@@ -8,7 +8,7 @@ def _setup_logger(log_file_path="../../logs/logfile.log") -> "logging.Logger":
     from rich.logging import RichHandler
 
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.ERROR)
 
     # Console handler
     console = Console(force_terminal=True)
@@ -19,7 +19,7 @@ def _setup_logger(log_file_path="../../logs/logfile.log") -> "logging.Logger":
 
     # File handler
     fh = logging.FileHandler(log_file_path)
-    fh.setLevel(logging.INFO)
+    fh.setLevel(logging.ERROR)
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     fh.setFormatter(formatter)
     logger.addHandler(fh)
