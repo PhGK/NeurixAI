@@ -4,17 +4,18 @@ import os
 
 import torch
 import torch.nn as nn
+from scipy.stats import pearsonr
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import SGD
 from torch.optim.lr_scheduler import ExponentialLR
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 import pandas as pd
 
+from druxai._logging import logger
 from druxai.models.NN import Interaction_Model
 from druxai.utils.data import MyDataSet
-from druxai.utils.dataframe_utils import create_batch_result
 
 # -----------------------------------------------------------------------------
 # training params
@@ -28,10 +29,11 @@ seed = 1337
 grad_clip = 1.0
 device = torch.device("mps")  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', 'mps' etc.
 PATH = "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/results/training"
+init_from = "scratch"
 # wandb logging
 wandb_log = True
 wandb_project_name = "druxai"
-wandb_run_name = "druxai-run0"
+wandb_run_name = "druxai-run1"
 # added to not get AttributeError: module '__main__' has no attribute '__spec__'
 __spec__ = None
 # -----------------------------------------------------------------------------
@@ -52,39 +54,47 @@ if wandb_log:
     )
 
 
-@torch.no_grad()
-def evaluate_model(model, ds, dl_test, fold, epoch, PATH, epochs):
+def evaluate_model(model, ds, dataloader_val, fold, epoch, PATH, epochs):
     """Evaluate Model after each epoch of training and saves final prediction for last epoch.
 
     Args:
         model (_type_): _description_
         ds (_type_): _description_
-        dl_test (_type_): _description_
+        dataloader_val (_type_): Dataloader which is being evaluated.
         fold (_type_): _description_
         epoch (_type_): _description_
         PATH (_type_): _description_
 
     Returns
     -------
-        avg_test_loss: average test loss for batch
+        total_loss: average test loss for batch
+        r_score: Pearson correlation coefficient (r score) for the predictions
     """
     model.eval()
-    avg_test_loss = 0
     prediction_frames = []
+    all_outcomes = []
+    all_predictions = []
+    val_total_loss = 0.0
 
-    for drug, molecular, outcome, idx in tqdm(dl_test):
+    for drug, molecular, outcome, _ in tqdm(dataloader_val):
         drug, molecular, outcome = drug.to(device), molecular.to(device), outcome.to(device)
-        prediction = model(drug, molecular)
+
+        with torch.no_grad():
+            prediction = model(drug, molecular)
+            loss = nn.HuberLoss()(outcome, prediction)
+            val_total_loss += loss.item()
+
+        # TODO: bad dependency, make criterion instead of hardcoding huber loss
         loss = nn.HuberLoss()(outcome, prediction)
 
-        batch_result = create_batch_result(outcome, prediction, ds, idx, fold, epoch)
-        prediction_frames.append(batch_result)
-        avg_test_loss += loss.item() / len(dl_test)
-
+        all_outcomes.extend(outcome.cpu().detach().numpy().reshape(-1))
+        all_predictions.extend(prediction.cpu().detach().numpy().reshape(-1))
         if epoch == epochs:
             pd.concat(prediction_frames, axis=0).to_csv(os.path.join(PATH, "prediction.csv"))
 
-    return avg_test_loss
+    r_score, _ = pearsonr(all_outcomes, all_predictions)
+    avg_loss = val_total_loss / len(dataloader_val)
+    return avg_loss, r_score
 
 
 def train():
@@ -95,39 +105,78 @@ def train():
     if not os.path.exists(PATH):
         os.makedirs(PATH)
 
-    # Hard coded for now, should be improved in the future
-    ds = MyDataSet(file_path="../../data/preprocessed", results_dir="../../results", n_splits=5)
-    model = Interaction_Model(ds)
-    model.train().to(device)
+    # Some Initalizations
+    best_val_loss = 1e5
 
-    optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
-    optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
+    # Hard coded 2 datasets for now, should be improved in the future; Badly coded; for sure needs to be refactored
+    # Works because splits are the same because of same seed
+    train_data = MyDataSet(file_path="../../data/preprocessed", results_dir="../../results", n_splits=5)
+    dataset_ids = train_data.generate_train_val_test_ids(seed=seed)
+    train_data.preprocess_train_val_test(dataset_ids)
+
+    val_data = MyDataSet(file_path="../../data/preprocessed", results_dir="../../results", n_splits=5)
+    dataset_ids = val_data.generate_train_val_test_ids(seed=seed)
+    val_data.preprocess_train_val_test(dataset_ids)
+
+    # Determine whether to initialize a new model from scratch or resume training from a checkpoint
+    if init_from == "scratch":
+        logger.info("Training model from scratch.")
+        model = Interaction_Model(train_data)
+        model.train().to(device)
+        # Setup optimizers
+        optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
+        optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
+
+    elif init_from == "resume":
+        logger.info(f"Resuming training from {PATH}/ckpt.pt")
+        # Load checkpoint
+        ckpt_path = os.path.join(PATH, "ckpt.pt")
+        checkpoint = torch.load(ckpt_path, map_location=device)
+        # Initialize model with the same configuration as the checkpoint
+        model = Interaction_Model(train_data)
+        model.load_state_dict(checkpoint["model"])
+        # Setup optimizers
+        optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
+        optimizer2 = SGD(model.nn2.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
+        # Also load optimizer states if needed
+        optimizer1.load_state_dict(checkpoint["optimizer 1"])
+        optimizer2.load_state_dict(checkpoint["optimizer 2"])
+        # Update best validation loss
+        best_val_loss = checkpoint["best_val_loss"]
+        # Move model to the appropriate device
+        model.to(device)
+    else:
+        raise ValueError("init_from must be either 'scratch' or 'resume'")
+
     criterion = nn.HuberLoss()
 
     scheduler1 = ExponentialLR(optimizer1, gamma=0.9)  # gamma 0.9 #0.95 only for 100 epochs
     scheduler2 = ExponentialLR(optimizer2, gamma=0.9)  # gamma 0.9
 
-    # Small subset for testing
-    # if train_on_subset:
-    #     subset_indices = range(0, subset_size)
-    #     subset_dataset = Subset(ds, subset_indices)
-    #     dl = DataLoader(subset_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
-    # else:
-    #     dl = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
+    # Choose to use subset for experimental purposes or entire dataset
+    val_data.selected_dataset = "val"
+    if train_on_subset:
+        subset_indices = range(0, int(0.3 * subset_size))
+        subset_dataset = Subset(val_data, subset_indices)
+        val_loader = DataLoader(subset_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
+    else:
+        val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=6)
 
-    dataset_ids = ds.generate_train_val_test_ids()
-    ds.preprocess_train_val_test(dataset_ids)
+    train_data.selected_dataset = "train"
+    if train_on_subset:
+        subset_indices = range(0, subset_size)
+        subset_dataset = Subset(train_data, subset_indices)
+        train_loader = DataLoader(subset_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+    else:
+        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=6)
 
-    # Create DataLoader instances for train and validation datasets
-
-    ds.selected_dataset = "train"
-    train_loader = DataLoader(ds, batch_size=batch_size, shuffle=True)
-
-    for epoch in range(1, epochs + 1):  # been without +1
+    # training loop
+    for epoch in range(epochs):
         model.train()
-        train_loss = 0.0
-        for drug, molecular, outcome, _ in tqdm(train_loader):
+        total_loss = 0.0
+        r2_batch = 0.0
 
+        for drug, molecular, outcome, _ in tqdm(train_loader):
             drug, molecular, outcome = drug.to(device), molecular.to(device), outcome.to(device)
 
             optimizer1.zero_grad()
@@ -135,13 +184,7 @@ def train():
 
             prediction = model.forward(drug, molecular)
             loss = criterion(outcome, prediction)
-
-            # Log the loss
-            if wandb_log:
-                wandb.log({"Iteration Loss": loss.item()})
-
-            # Batch train loss
-            train_loss += loss.item() * drug.size(0)
+            total_loss += loss.item()
 
             loss.backward()
             clip_grad_norm_(model.parameters(), grad_clip)
@@ -150,13 +193,32 @@ def train():
             selected_optimizer = optimizer1 if torch.rand(1) < 0.5 else optimizer2
             selected_optimizer.step()
 
-        ds.selected_dataset = "val"
-        val_loader = DataLoader(ds, batch_size=batch_size, shuffle=True)
-        avg_test_loss = evaluate_model(model, ds, val_loader, fold, epoch, PATH, epochs)
-        ds.selected_dataset = "train"
+            # Calculate Pearson correlation coefficient for the current batch; Computationally not very efficient
+            r2_batch, _ = pearsonr(
+                outcome.cpu().detach().numpy().reshape(-1), prediction.cpu().detach().numpy().reshape(-1)
+            )
+            r2_batch += r2_batch
+
+        avg_r2 = r2_batch / len(train_loader)
+        avg_loss = total_loss / len(train_loader)
+
+        avg_val_loss, r2_val = evaluate_model(model, train_data, val_loader, fold, epoch, PATH, epochs)
 
         if wandb_log:
-            wandb.log({"epoch": epoch, "epoch loss": train_loss, "test_loss": avg_test_loss})
+            wandb.log({"train loss": avg_loss, "r2_train": avg_r2, "val_loss": avg_val_loss, "r2_val": r2_val})
+
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            checkpoint = {
+                "model": model.state_dict(),
+                "optimizer 1": optimizer1.state_dict(),
+                "optimizer 2": optimizer2.state_dict(),
+                "epoch": epoch,
+                "best_val_loss": best_val_loss,
+                "config": config,
+            }
+            logger.info(f"New best val_loss achieved. Saving checkpoint to {PATH}/ckpt.pt")
+            torch.save(checkpoint, os.path.join(PATH, "ckpt.pt"))
 
         scheduler1.step()
         scheduler2.step()
