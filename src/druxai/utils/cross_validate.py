@@ -5,7 +5,8 @@ import os
 import torch as tc
 from models.LRP import calculate_one_side_LRP
 from models.NN import Interaction_Model
-from utils.data import LRPSet
+
+from druxai.utils.data_old import LRPSet
 
 
 def crossvalidate(model, ds, device, results_dir="../../results"):

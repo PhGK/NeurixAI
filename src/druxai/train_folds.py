@@ -13,7 +13,7 @@ from tqdm import tqdm
 import pandas as pd
 
 from druxai.models.NN import Interaction_Model
-from druxai.utils.data import MyDataSet
+from druxai.utils.data_old import MyDataSet
 from druxai.utils.dataframe_utils import create_batch_result
 
 # -----------------------------------------------------------------------------

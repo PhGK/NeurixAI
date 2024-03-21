@@ -6,7 +6,7 @@ import torch as tc
 
 from druxai.models.NN import Interaction_Model
 from druxai.utils.cross_validate import crossvalidate
-from druxai.utils.data import MyDataSet
+from druxai.utils.data_old import MyDataSet
 
 
 def main():

@@ -1,7 +1,6 @@
 """Training script. To run it do: $ python train.py --batch_size=32."""
 
 import os
-import random
 from typing import Tuple
 
 import torch
@@ -10,19 +9,15 @@ from scipy.stats import pearsonr
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import SGD
 from torch.optim.lr_scheduler import ExponentialLR
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 import pandas as pd
 
 from druxai._logging import _setup_logger
 from druxai.models.NN import Interaction_Model
-from druxai.utils.data import DrugResponseDataset
-from druxai.utils.dataframe_utils import (
-    create_batch_result,
-    split_data_by_cell_line_ids,
-    standardize_molecular_data_inplace,
-)
+from druxai.utils.data_old import MyDataSet
+from druxai.utils.dataframe_utils import create_batch_result
 
 # -----------------------------------------------------------------------------
 # path which need to be defined
@@ -39,7 +34,6 @@ seed = 1337
 grad_clip = 1.0
 device = torch.device("mps")  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', 'mps' etc.
 criterion = nn.HuberLoss()
-num_workers = 1
 # Use Preloaded weights "resume" from os.path.join(RESULTS_PATH, "ckpt.pt") or start from scratch
 init_from = "scratch"
 # Logging config
@@ -69,11 +63,7 @@ if wandb_log:
 
 
 def evaluate_model(
-    model: torch.nn.Module,
-    dataloader_val: DataLoader,
-    data: DrugResponseDataset,
-    epoch: int,
-    save_evaluation: bool = True,
+    model: torch.nn.Module, dataloader_val: DataLoader, val_data: MyDataSet, epoch: int, save_evaluation: bool = True
 ) -> Tuple[float, float]:
     """Evaluate the performance of a neural network model on a validation dataset.
 
@@ -100,12 +90,8 @@ def evaluate_model(
     all_predictions = []
     val_total_loss = 0.0
 
-    for X, y, idx in tqdm(dataloader_val):
-        drug, molecular, outcome = (
-            X["drug_encoding"].to(torch.device("mps")),
-            X["gene_expression"].to(torch.device("mps")),
-            y.to(torch.device("mps")),
-        )
+    for drug, molecular, outcome, idx in tqdm(dataloader_val):
+        drug, molecular, outcome = drug.to(device), molecular.to(device), outcome.to(device)
 
         with torch.no_grad():
             prediction = model(drug, molecular)
@@ -115,7 +101,7 @@ def evaluate_model(
         all_outcomes.extend(outcome.cpu().detach().numpy().reshape(-1))
         all_predictions.extend(prediction.cpu().detach().numpy().reshape(-1))
         if epoch == (epochs - 1):
-            batch_result = create_batch_result(outcome, prediction, data, idx, epoch)
+            batch_result = create_batch_result(outcome, prediction, val_data, idx, epoch)
             prediction_frames.append(batch_result)
 
     if save_evaluation & (epoch == (epochs - 1)):
@@ -137,39 +123,22 @@ def train():
     # Some Initalizations
     best_val_loss = 1e6
 
-    # Load data
-    data = DrugResponseDataset(DATA_PATH)
-    train_id, val_id, test_id = split_data_by_cell_line_ids(data.targets)
-    standardize_molecular_data_inplace(data, train_id, val_id, test_id)
-    if train_on_subset:
-        train_loader = DataLoader(
-            data,
-            sampler=random.sample(train_id, subset_size),
-            batch_size=8,
-            shuffle=False,
-            pin_memory=True,
-            num_workers=num_workers,
-        )
-        val_loader = DataLoader(
-            data,
-            sampler=random.sample(val_id, int(0.2 * subset_size)),
-            batch_size=8,
-            shuffle=False,
-            pin_memory=True,
-            num_workers=num_workers,
-        )
-    else:
-        train_loader = DataLoader(
-            data, sampler=train_id, batch_size=8, shuffle=False, pin_memory=True, num_workers=num_workers
-        )
-        val_loader = DataLoader(
-            data, sampler=val_id, batch_size=8, shuffle=False, pin_memory=True, num_workers=num_workers
-        )
+    # Hard coded 2 datasets for now, should be improved in the future; Badly coded; for sure needs to be refactored
+    # Works because splits are the same because of same seed
+    train_data = MyDataSet(file_path=DATA_PATH, results_dir=RESULTS_PATH, n_splits=5)
+    dataset_ids = train_data.generate_train_val_test_ids(seed=seed)
+    train_data.preprocess_train_val_test(dataset_ids)
+    train_data.selected_dataset = "train"
+
+    val_data = MyDataSet(file_path=DATA_PATH, results_dir=RESULTS_PATH, n_splits=5)
+    dataset_ids = val_data.generate_train_val_test_ids(seed=seed)
+    val_data.preprocess_train_val_test(dataset_ids)
+    val_data.selected_dataset = "val"
 
     # Determine whether to initialize a new model from scratch or resume training from a checkpoint
     if init_from == "scratch":
         logger.info("Training model from scratch.")
-        model = Interaction_Model(data)
+        model = Interaction_Model(train_data)
         model.train().to(device)
         # Setup optimizers
         optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
@@ -181,7 +150,7 @@ def train():
         ckpt_path = os.path.join(RESULTS_PATH, "ckpt.pt")
         checkpoint = torch.load(ckpt_path, map_location=device)
         # Initialize model with the same configuration as the checkpoint
-        model = Interaction_Model(data)
+        model = Interaction_Model(train_data)
         model.load_state_dict(checkpoint["model"])
         # Setup optimizers
         optimizer1 = SGD(model.nn1.parameters(), momentum=0.9, lr=learning_rate, weight_decay=1e-5)
@@ -199,17 +168,28 @@ def train():
     scheduler1 = ExponentialLR(optimizer1, gamma=0.9)  # gamma 0.9 #0.95 only for 100 epochs
     scheduler2 = ExponentialLR(optimizer2, gamma=0.9)  # gamma 0.9
 
+    # Choose to use subset for experimental purposes or entire dataset
+    if train_on_subset:
+        subset_indices = range(0, int(0.3 * subset_size))
+        subset_dataset = Subset(val_data, subset_indices)
+        val_loader = DataLoader(subset_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=4)
+    else:
+        val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=6)
+
+    if train_on_subset:
+        subset_indices = range(0, subset_size)
+        subset_dataset = Subset(train_data, subset_indices)
+        train_loader = DataLoader(subset_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=4)
+    else:
+        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=6)
+
     # training loop
     for epoch in range(epochs):
         model.train()
         total_loss = 0.0
 
-        for X, y, _ in tqdm(train_loader):
-            drug, molecular, outcome = (
-                X["drug_encoding"].to(torch.device("mps")),
-                X["gene_expression"].to(torch.device("mps")),
-                y.to(torch.device("mps")),
-            )
+        for drug, molecular, outcome, _ in tqdm(train_loader):
+            drug, molecular, outcome = drug.to(device), molecular.to(device), outcome.to(device)
 
             optimizer1.zero_grad()
             optimizer2.zero_grad()
@@ -227,7 +207,7 @@ def train():
 
         avg_loss = total_loss / len(train_loader)
 
-        avg_val_loss, r2_val = evaluate_model(model, val_loader, data, epoch)
+        avg_val_loss, r2_val = evaluate_model(model, val_loader, val_data, epoch)
 
         if wandb_log:
             wandb.log({"train loss": avg_loss, "val_loss": avg_val_loss, "r2_val": r2_val})
