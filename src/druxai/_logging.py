@@ -1,14 +1,17 @@
 import logging
+import os
 
 __all__ = ["logger"]
 
 
-def _setup_logger(log_file_path="../../logs/logfile.log") -> "logging.Logger":
+def _setup_logger(log_path="../../logs/") -> "logging.Logger":
     from rich.console import Console
     from rich.logging import RichHandler
 
+    os.makedirs(log_path, exist_ok=True)
+    log_file_path = os.path.join(log_path, "logfile.log")
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.ERROR)
+    logger.setLevel(logging.INFO)
 
     # Console handler
     console = Console(force_terminal=True)
@@ -19,7 +22,7 @@ def _setup_logger(log_file_path="../../logs/logfile.log") -> "logging.Logger":
 
     # File handler
     fh = logging.FileHandler(log_file_path)
-    fh.setLevel(logging.ERROR)
+    fh.setLevel(logging.INFO)
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     fh.setFormatter(formatter)
     logger.addHandler(fh)
