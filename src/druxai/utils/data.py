@@ -7,6 +7,8 @@ from torch.utils.data import Dataset
 
 import pandas as pd
 
+from druxai._logging import logger
+
 
 class DrugResponseDataset(Dataset):
     """Drug Response Dataset class which handels molecular and drug data."""
@@ -16,8 +18,9 @@ class DrugResponseDataset(Dataset):
         self.targets = pd.read_csv(
             os.path.join(file_path, "auc_secondary_screen_prediction_targets.csv"), index_col=0
         ).reset_index(drop=True)
+        logger.info(f"Loaded targets with shape: {self.targets.shape}")
         self.molecular_data = pd.read_csv(os.path.join(file_path, "rna_df.csv"), index_col=0)
-
+        logger.info(f"Loaded molecular data with shape: {self.molecular_data.shape}")
         # Check for NaNs and duplicates
         assert not self.targets.isnull().values.any(), "NaN values detected in self.targets DataFrame."
         assert not self.molecular_data.isnull().values.any(), "NaN values detected in self.molecular_data DataFrame."
