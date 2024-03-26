@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+import time
 from typing import Dict, Tuple
 
 import torch
@@ -21,7 +22,7 @@ from tqdm import tqdm
 
 from druxai._logging import _setup_logger, logger
 from druxai.models.NN_minimal import Interaction_Model
-from druxai.utils.data import DrugResponseDataset
+from druxai.utils.data import DataloaderSampler, DrugResponseDataset
 from druxai.utils.dataframe_utils import (
     split_data_by_cell_line_ids,
     standardize_molecular_data_inplace,
@@ -47,11 +48,12 @@ def run(cfg: dict, logger: logging.Logger) -> None:
     # Load data
     data = DrugResponseDataset(cfg["DATA_PATH"])
     train_id, val_id, test_id = split_data_by_cell_line_ids(data.targets, seed=cfg["SEED"])
+    train_sampler, val_sampler = DataloaderSampler(train_id), DataloaderSampler(val_id)
     standardize_molecular_data_inplace(data, train_id, val_id, test_id)
 
     train_loader = DataLoader(
         data,
-        sampler=train_id,
+        sampler=train_sampler,
         batch_size=cfg["BATCH_SIZE"],
         shuffle=False,
         pin_memory=True,
@@ -60,7 +62,7 @@ def run(cfg: dict, logger: logging.Logger) -> None:
     )
     val_loader = DataLoader(
         data,
-        sampler=val_id,
+        sampler=val_sampler,
         batch_size=cfg["BATCH_SIZE"],
         shuffle=False,
         pin_memory=True,
@@ -229,6 +231,7 @@ def train(
                         {
                             "iter": iter_num,
                             "epoch": epoch,
+                            "timestamp": time.time(),
                             "train loss": train_loss,
                             "val_loss": val_loss,
                             "r2_train": train_rscore,
