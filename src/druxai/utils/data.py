@@ -11,8 +11,6 @@ import pandas as pd
 
 from druxai._logging import logger
 
-# from druxai._logging import logger
-
 
 class DrugResponseDataset(Dataset):
     """Drug Response Dataset class which handels molecular and drug data."""

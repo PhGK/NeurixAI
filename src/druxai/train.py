@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import time
+from datetime import datetime
 from typing import Dict, Tuple
 
 import torch
@@ -231,7 +232,7 @@ def train(
                         {
                             "iter": iter_num,
                             "epoch": epoch,
-                            "timestamp": time.time(),
+                            "timestamp": datetime.fromtimestamp(time.time()),
                             "train loss": train_loss,
                             "val_loss": val_loss,
                             "r2_train": train_rscore,
