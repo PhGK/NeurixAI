@@ -3,26 +3,26 @@
 import argparse
 import logging
 import os
-from typing import Callable, Dict, Tuple
+from typing import Dict, Tuple
 
 import torch
 import torch.nn as nn
 import wandb
 import yaml
-from scipy.stats import pearsonr, spearmanr
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import AdamW, Optimizer
 from torch.optim.lr_scheduler import ExponentialLR, _LRScheduler
 from torch.utils.data import DataLoader
+from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
+    MeanMetric,
+    SpearmanCorrCoef,
+)
 from tqdm import tqdm
-
-import pandas as pd
 
 from druxai._logging import _setup_logger, logger
 from druxai.models.NN_minimal import Interaction_Model
 from druxai.utils.data import DrugResponseDataset
 from druxai.utils.dataframe_utils import (
-    create_batch_result,
     split_data_by_cell_line_ids,
     standardize_molecular_data_inplace,
 )
@@ -31,83 +31,10 @@ from druxai.utils.dataframe_utils import (
 __spec__ = None
 
 
-@torch.no_grad()
-def evaluate_model(
-    model: torch.nn.Module,
-    dataloader_val: DataLoader,
-    data: DrugResponseDataset,
-    epoch: int,
-    cfg: Dict,
-    loss_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    save_evaluation: bool = True,
-    eval_metric: str = "spearmanr",
-) -> Tuple[float, float]:
-    """Evaluate the performance of a neural network model on a validation dataset.
-
-    This function evaluates the given `model` on the provided `val_data` using the `dataloader_val`.
-    It calculates the average loss and the Pearson correlation coefficient (r score) for the predictions.
-
-    Args:
-        model (torch.nn.Module): The neural network model being evaluated.
-        dataloader_val (DataLoader): DataLoader containing validation data.
-        val_data (MyDataSet): Validation dataset.
-        epoch (int): The current epoch number.
-        save_evaluation (bool, optional): Whether to save the final predictions. Defaults to True.
-        eval_metric (str, optional): The evaluation metric to use, either "spearmanr" or "pearsonr".
-                                    Defaults to "spearmanr".
-
-    Returns
-    -------
-        Tuple[float, float]: A tuple containing the average loss and the Pearson correlation coefficient (r score).
-
-    Example:
-        avg_loss, r_score = evaluate_model(model, dataloader_val, val_data, 5, save_evaluation=True)
-    """
-    model.eval()
-    prediction_frames = []
-    all_outcomes = []
-    all_predictions = []
-    losses = torch.zeros(len(dataloader_val))
-    for iter_count, (X, y, idx) in tqdm(enumerate(dataloader_val)):
-        drug, molecular, outcome = (
-            X["drug_encoding"].to(cfg["DEVICE"]),
-            X["gene_expression"].to(cfg["DEVICE"]),
-            y.to(cfg["DEVICE"]),
-        )
-
-        prediction = model(drug, molecular)
-        loss = loss_func(outcome, prediction)
-        losses[iter_count] = loss.item()
-
-        all_outcomes.extend(outcome.cpu().detach().numpy().reshape(-1))
-        all_predictions.extend(prediction.cpu().detach().numpy().reshape(-1))
-        if epoch == (cfg["EPOCHS"] - 1):
-            batch_result = create_batch_result(outcome, prediction, data, idx, epoch)
-            prediction_frames.append(batch_result)
-
-    if save_evaluation & (epoch == (cfg["EPOCHS"] - 1)):
-        pd.concat(prediction_frames, axis=0).to_csv(os.path.join(cfg["WEIGHT_DECAY"], "prediction.csv"))
-
-    if eval_metric == "spearmanr":
-        r_score, _ = spearmanr(all_outcomes, all_predictions)
-    elif eval_metric == "pearsonr":
-        r_score, _ = pearsonr(all_outcomes, all_predictions)
-    else:
-        raise ValueError("Invalid evaluation metric. Use 'spearmanr' or 'pearsonr'.")
-
-    avg_loss = losses.mean()
-    model.train()
-    return avg_loss, r_score
-
-
 def run(cfg: dict, logger: logging.Logger) -> None:
     """Kick off training."""
     if cfg["WANDB_LOG"]:
-        wandb.init(
-            project=cfg["WANDB_PROJECT_NAME"],
-            name=cfg["WANDB_RUN_NAME"],
-            config=cfg,
-        )
+        wandb.init(project=cfg["WANDB_PROJECT_NAME"], name=cfg["WANDB_RUN_NAME"], dir=cfg["RESULTS_PATH"], config=cfg)
 
     # Loss function
     loss_func = nn.HuberLoss()
@@ -162,9 +89,9 @@ def run(cfg: dict, logger: logging.Logger) -> None:
             weight_decay=cfg["WEIGHT_DECAY"],
         )
     elif cfg["INIT_FROM"] == "resume":
-        logger.info(f"Resuming training from {cfg['WEIGHT_DECAY']}/ckpt.pt")
+        logger.info(f"Resuming training from {cfg['RESULTS_PATH']}/ckpt.pt")
         # Load checkpoint
-        ckpt_path = os.path.join(cfg["WEIGHT_DECAY"], "ckpt.pt")
+        ckpt_path = os.path.join(cfg["RESULTS_PATH"], "ckpt.pt")
         checkpoint = torch.load(ckpt_path)
         # Initialize model with the same configuration as the checkpoint
         model = Interaction_Model(data)
@@ -195,7 +122,8 @@ def run(cfg: dict, logger: logging.Logger) -> None:
 
     # Set Learning Rate scheduler
     scheduler1 = ExponentialLR(optimizer1, gamma=0.9)
-    scheduler2 = ExponentialLR(optimizer1, gamma=0.9)
+    scheduler2 = ExponentialLR(optimizer2, gamma=0.9)
+
     train(
         model=model,
         loss_func=loss_func,
@@ -203,7 +131,6 @@ def run(cfg: dict, logger: logging.Logger) -> None:
         schedulers=(scheduler1, scheduler2),
         train_loader=train_loader,
         val_loader=val_loader,
-        data=data,
         cfg=cfg,
         iter_num=iter_num,
         best_val_loss=best_val_loss,
@@ -221,7 +148,6 @@ def train(
     schedulers: Tuple[_LRScheduler, _LRScheduler],
     train_loader: DataLoader,
     val_loader: DataLoader,
-    data: DrugResponseDataset,
     cfg: Dict,
     iter_num: int = 0,
     best_val_loss: int = 1e9,
@@ -229,26 +155,26 @@ def train(
     """Train DruxAI Network end-to-end.
 
     Args:
-        model (nn.Module): _description_
-        loss_func (nn.Module): _description_
-        optimizers (Tuple): _description_
-        schedulers (Tuple): _description_
-        train_loader (DataLoader): _description_
-        val_loader (DataLoader): _description_
-        epochs (int): _description_
-        device (torch.device): _description_
-        grad_clip (int): _description_
-        decay_lr (int): _description_
-        cfg (Dict): _description_
-        wandb_log (bool, optional): _description_. Defaults to True.
-        iter_num (int, optional): _description_. Defaults to 0.
-        best_val_loss (int, optional): _description_. Defaults to 1e9.
+        model (nn.Module): The neural network model to be trained.
+        loss_func (nn.Module): The loss function used for training.
+        optimizers (Tuple): A tuple containing two optimizers for the model's parameters.
+        schedulers (Tuple): A tuple containing two learning rate schedulers corresponding to the optimizers.
+        train_loader (DataLoader): DataLoader for the training dataset.
+        val_loader (DataLoader): DataLoader for the validation dataset.
+        cfg (Dict): A dictionary containing configuration parameters for training.
+        iter_num (int, optional): The current iteration number. Defaults to 0.
+        best_val_loss (int, optional): The best validation loss obtained during training. Defaults to 1e9.
     """
+    metric_train_loss = MeanMetric().to(cfg["DEVICE"])
+    metric_val_loss = MeanMetric().to(cfg["DEVICE"])
+    metric_train_rscore = SpearmanCorrCoef().to(cfg["DEVICE"])
+    metric_val_rscore = SpearmanCorrCoef().to(cfg["DEVICE"])
+
     optimizer1, optimizer2 = optimizers[0], optimizers[1]
     scheduler1, scheduler2 = schedulers[0], schedulers[1]
     for epoch in range(cfg["EPOCHS"]):
         model.train()
-        for X, y, _ in tqdm(train_loader):
+        for X, y, _ in tqdm(train_loader, leave=False):
             drug, molecular, outcome = (
                 X["drug_encoding"].to(cfg["DEVICE"]),
                 X["gene_expression"].to(cfg["DEVICE"]),
@@ -259,31 +185,60 @@ def train(
             optimizer2.zero_grad()
 
             prediction = model.forward(drug, molecular)
-            loss = loss_func(outcome, prediction)
-
+            loss = loss_func(prediction, outcome)
+            metric_train_loss(loss)
+            metric_train_rscore(prediction, outcome)
             loss.backward()
             clip_grad_norm_(model.parameters(), cfg["GRAD_CLIP"])
             # Randomly select optimizer
             selected_optimizer = optimizer1 if torch.rand(1) < 0.5 else optimizer2
             selected_optimizer.step()
-            if cfg["DECAY_LR"]:
-                scheduler1.step()
-                scheduler2.step()
+
             if (iter_num % cfg["EVAL_INTERVAL"] == 0) & (iter_num != 0):
-                avg_val_loss, r2_val = evaluate_model(model, val_loader, data, epoch, cfg, loss_func)
+                # ------------------------------------------------------------------------------
+                # TEST LOOP
+                # ------------------------------------------------------------------------------
+                model.eval()
+                for X, y, _ in tqdm(val_loader, leave=False):
+                    drug, molecular, outcome = (
+                        X["drug_encoding"].to(cfg["DEVICE"]),
+                        X["gene_expression"].to(cfg["DEVICE"]),
+                        y.to(cfg["DEVICE"]),
+                    )
+
+                    with torch.no_grad():
+                        prediction = model(drug, molecular)
+                        batch_loss = loss_func(outcome, prediction)
+
+                        metric_val_loss(batch_loss)
+                        metric_val_rscore(prediction, outcome)
+
+                # Compute epoch metrics from cached batch metrics. Take absolute values of R Scores for eval!
+                train_loss = float(metric_train_loss.compute())
+                val_loss = float(metric_val_loss.compute())
+                train_rscore = float(abs(metric_train_rscore.compute()))
+                val_rscore = float(abs(metric_val_rscore.compute()))
+
+                # Reset metrics for next evaluation interval
+                metric_train_loss.reset()
+                metric_val_loss.reset()
+                metric_train_rscore.reset()
+                metric_val_rscore.reset()
                 if cfg["WANDB_LOG"]:
                     wandb.log(
                         {
                             "iter": iter_num,
-                            "train loss": loss.item(),
-                            "val_loss": avg_val_loss,
-                            "r2_val": r2_val,
+                            "epoch": epoch,
+                            "train loss": train_loss,
+                            "val_loss": val_loss,
+                            "r2_train": train_rscore,
+                            "r2_val": val_rscore,
                             "lr_opt1": optimizer1.param_groups[0]["lr"],
                             "lr_opt2": optimizer2.param_groups[0]["lr"],
                         }
                     )
-                if avg_val_loss < best_val_loss:
-                    best_val_loss = avg_val_loss
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
                     checkpoint = {
                         "model": model.state_dict(),
                         "optimizer 1": optimizer1.state_dict(),
@@ -294,11 +249,18 @@ def train(
                         "config": cfg,
                     }
                     logger.info(
-                        f"New best val_loss achieved. Saving checkpoint to "
-                        f"{os.path.join(cfg['RESULTS_PATH'], 'ckpt.pt')}"
+                        f"New best val_loss achieved! \n"
+                        f"Epoch: {epoch} "
+                        f"Train Loss: {train_loss:.4f}; Train R2: {train_rscore:.4f} "
+                        f"Val Loss: {best_val_loss:.4f}; Val R2: {val_rscore:.4f} \n"
+                        f"Saving checkpoint to {os.path.join(cfg['RESULTS_PATH'], 'ckpt.pt')}"
                     )
                     torch.save(checkpoint, os.path.join(cfg["RESULTS_PATH"], "ckpt.pt"))
             iter_num += 1
+
+        if cfg["DECAY_LR"]:
+            scheduler1.step()
+            scheduler2.step()
 
 
 def check_cuda_devices(logger):
