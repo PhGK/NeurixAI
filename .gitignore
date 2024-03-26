@@ -6,7 +6,8 @@
 /results_with_compound_embedding/*
 /results_without_compound_embedding/*
 /*results*/*
-.ipynb_checkpoints
+*.ipynb_checkpoints
+*.html
 /docs/*
 /logs/*
 .flake8
