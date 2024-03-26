@@ -13,7 +13,7 @@ class Model(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim, dropout):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.relu = nn.LeakyReLU()
+        self.lrelu = nn.LeakyReLU()
         self.dropout = nn.Dropout(p=dropout)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
         self.init_weights()
@@ -35,7 +35,7 @@ class Model(nn.Module):
             _type_: _description_
         """
         x = self.fc1(x)
-        x = self.relu(x)
+        x = self.lrelu(x)
         x = self.dropout(x)
         return self.fc2(x)
 
