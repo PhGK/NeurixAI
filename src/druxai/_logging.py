@@ -5,6 +5,7 @@ __all__ = ["logger"]
 
 
 def _setup_logger(log_path="../../logs/") -> "logging.Logger":
+
     from rich.console import Console
     from rich.logging import RichHandler
 
@@ -29,7 +30,6 @@ def _setup_logger(log_path="../../logs/") -> "logging.Logger":
 
     # This prevents double outputs
     logger.propagate = False
-
     return logger
 
 
