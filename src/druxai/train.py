@@ -4,7 +4,6 @@ import argparse
 import logging
 import os
 import time
-from datetime import datetime
 from typing import Dict, Tuple
 
 import torch
@@ -175,6 +174,7 @@ def train(
 
     optimizer1, optimizer2 = optimizers[0], optimizers[1]
     scheduler1, scheduler2 = schedulers[0], schedulers[1]
+    start_time = time.time()
     for epoch in range(cfg["EPOCHS"]):
         model.train()
         for X, y, _ in tqdm(train_loader, leave=False):
@@ -227,12 +227,16 @@ def train(
                 metric_val_loss.reset()
                 metric_train_rscore.reset()
                 metric_val_rscore.reset()
+                # Calculate run time until evaluation
+                elapsed_time = time.time() - start_time
+                hours = int(elapsed_time // 3600)
+
                 if cfg["WANDB_LOG"]:
                     wandb.log(
                         {
                             "iter": iter_num,
                             "epoch": epoch,
-                            "timestamp": datetime.fromtimestamp(time.time()),
+                            "timestamp": hours,
                             "train loss": train_loss,
                             "val_loss": val_loss,
                             "r2_train": train_rscore,
