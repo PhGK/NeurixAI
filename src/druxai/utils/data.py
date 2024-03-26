@@ -1,13 +1,17 @@
 """Drug Response Data Module."""
 
 import os
+import random
 
 import torch
 from torch.utils.data import Dataset
+from torch.utils.data.sampler import Sampler
 
 import pandas as pd
 
 from druxai._logging import logger
+
+# from druxai._logging import logger
 
 
 class DrugResponseDataset(Dataset):
@@ -47,3 +51,37 @@ class DrugResponseDataset(Dataset):
     def __len__(self):
         """Return length of the targets."""
         return len(self.targets)
+
+
+class DataloaderSampler(Sampler):
+    """Sampler that generates indices based on a fixed list of indices."""
+
+    def __init__(self, indices):
+        """
+        Initialize the FixedSampler with a list of fixed indices.
+
+        Args:
+            indices (list): A list of fixed indices.
+        """
+        self.indices = indices
+
+    def __iter__(self):
+        """
+        Return an iterator over the fixed indices. Shuffles the indices at the beginning of each epoch.
+
+        Returns
+        -------
+            iterator: An iterator over the fixed indices.
+        """
+        random.shuffle(self.indices)  # Shuffle indices at the beginning of each epoch
+        return iter(self.indices)
+
+    def __len__(self):
+        """
+        Return the number of fixed indices.
+
+        Returns
+        -------
+            int: The number of fixed indices.
+        """
+        return len(self.indices)
