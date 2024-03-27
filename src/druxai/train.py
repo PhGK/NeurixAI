@@ -11,7 +11,7 @@ import torch.nn as nn
 import wandb
 import yaml
 from torch.nn.utils import clip_grad_norm_
-from torch.optim import AdamW, Optimizer
+from torch.optim import SGD, Optimizer
 from torch.optim.lr_scheduler import ExponentialLR, _LRScheduler
 from torch.utils.data import DataLoader
 from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
@@ -55,7 +55,6 @@ def run(cfg: dict, logger: logging.Logger) -> None:
         data,
         sampler=train_sampler,
         batch_size=cfg["BATCH_SIZE"],
-        shuffle=False,
         pin_memory=True,
         num_workers=cfg["NUM_WORKERS"],
         persistent_workers=True,
@@ -64,7 +63,6 @@ def run(cfg: dict, logger: logging.Logger) -> None:
         data,
         sampler=val_sampler,
         batch_size=cfg["BATCH_SIZE"],
-        shuffle=False,
         pin_memory=True,
         num_workers=cfg["NUM_WORKERS"],
         persistent_workers=True,
@@ -78,17 +76,11 @@ def run(cfg: dict, logger: logging.Logger) -> None:
         model = Interaction_Model(data)
         model.train().to(cfg["DEVICE"])
         # Setup optimizers
-        optimizer1 = AdamW(
-            model.nn1.parameters(),
-            cfg["LEARNING_RATE"],
-            betas=(cfg["BETA1"], cfg["BETA2"]),
-            weight_decay=cfg["WEIGHT_DECAY"],
+        optimizer1 = SGD(
+            model.nn1.parameters(), lr=cfg["LEARNING_RATE"], weight_decay=cfg["WEIGHT_DECAY"], momentum=cfg["MOMENTUM"]
         )
-        optimizer2 = AdamW(
-            model.nn2.parameters(),
-            cfg["LEARNING_RATE"],
-            betas=(cfg["BETA1"], cfg["BETA2"]),
-            weight_decay=cfg["WEIGHT_DECAY"],
+        optimizer2 = SGD(
+            model.nn2.parameters(), lr=cfg["LEARNING_RATE"], weight_decay=cfg["WEIGHT_DECAY"], momentum=cfg["MOMENTUM"]
         )
     elif cfg["INIT_FROM"] == "resume":
         logger.info(f"Resuming training from {cfg['RESULTS_PATH']}/ckpt.pt")
@@ -100,17 +92,11 @@ def run(cfg: dict, logger: logging.Logger) -> None:
         model.train().to(cfg["DEVICE"])
         model.load_state_dict(checkpoint["model"])
         # Setup optimizers
-        optimizer1 = AdamW(
-            model.nn1.parameters(),
-            cfg["LEARNING_RATE"],
-            betas=(cfg["BETA1"], cfg["BETA2"]),
-            weight_decay=cfg["WEIGHT_DECAY"],
+        optimizer1 = SGD(
+            model.nn1.parameters(), lr=cfg["LEARNING_RATE"], weight_decay=cfg["WEIGHT_DECAY"], momentum=cfg["MOMENTUM"]
         )
-        optimizer2 = AdamW(
-            model.nn2.parameters(),
-            cfg["LEARNING_RATE"],
-            betas=(cfg["BETA1"], cfg["BETA2"]),
-            weight_decay=cfg["WEIGHT_DECAY"],
+        optimizer2 = SGD(
+            model.nn2.parameters(), lr=cfg["LEARNING_RATE"], weight_decay=cfg["WEIGHT_DECAY"], momentum=cfg["MOMENTUM"]
         )
         # Also load optimizer states if needed
         optimizer1.load_state_dict(checkpoint["optimizer 1"])
