@@ -117,8 +117,8 @@ def train(
     val_loader: DataLoader,
     fixed_cfg: Dict,
     device,
+    epochs,
     best_val_loss: int = 1e9,
-    epochs: int = 1,
 ):
     """Train DruxAI Network end-to-end.
 
@@ -131,9 +131,8 @@ def train(
         val_loader (DataLoader): DataLoader for the validation dataset.
         cfg (Dict): A dictionary containing configuration parameters for training.
         device (str or torch.device, optional): The device to run the computations on ('cpu' or 'cuda').
-        best_val_loss (int, optional): The best validation loss obtained during training. Defaults to 1e9.
         epochs (int): Number of epochs to train the model for.
-
+        best_val_loss (int, optional): The best validation loss obtained during training. Defaults to 1e9.
     """
     optimizer1, optimizer2 = optimizers[0], optimizers[1]
     scheduler1, scheduler2 = schedulers[0], schedulers[1]
@@ -172,6 +171,7 @@ def train(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            logger.info(f"New best val_loss achieved! \n" f"Epoch: {epoch}; Val Loss: {best_val_loss:.4f}")
             # save_checkpoint(model, optimizer1, optimizer2, iter_num, best_val_loss, fixed_cfg, logger)
 
         wandb.log(
