@@ -1,18 +1,13 @@
 """Training script. To run it do: $ python train.py --batch_size=32."""
 
-import argparse
-import logging
 import os
-import time
 from typing import Dict, Tuple
 
 import torch
 import torch.nn as nn
-import wandb
 import yaml
-from torch.nn.utils import clip_grad_norm_
-from torch.optim import SGD, Optimizer
-from torch.optim.lr_scheduler import ExponentialLR, _LRScheduler
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader
 from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
     MeanMetric,
@@ -20,113 +15,99 @@ from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
 )
 from tqdm import tqdm
 
-from druxai._logging import _setup_logger, logger
+import wandb
+from druxai._logging import _setup_logger
 from druxai.models.NN_minimal import Interaction_Model
 from druxai.utils.data import DataloaderSampler, DrugResponseDataset
 from druxai.utils.dataframe_utils import (
     split_data_by_cell_line_ids,
     standardize_molecular_data_inplace,
 )
+from druxai.utils.set_seeds import set_seeds
+from druxai.utils.training_utils import (
+    build_dataloader,
+    evaluate,
+    get_ops_device_string,
+    load_yaml,
+    set_loss,
+    set_optimizers,
+    set_schedulers,
+)
 
 # added to not get AttributeError: module '__main__' has no attribute '__spec__'
 __spec__ = None
 
+# SET THIS PATH TO YOUR FIXED CONFIG FILE DIRECTORY
+fixed_cfg = load_yaml("/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/fixed_config.yml")
 
-def run(cfg: dict, logger: logging.Logger) -> None:
+# Create logger
+logger = _setup_logger(log_path=fixed_cfg["RESULTS_PATH"])
+
+# Set device
+device = get_ops_device_string()
+
+# Set seeds
+set_seeds()
+
+sweep_config = {
+    "method": "random",
+    "metric": {"name": "loss", "goal": "minimize"},
+    "parameters": {
+        "optimizer": {"values": ["sgd"]},
+        "scheduler": {"value": "exponential"},
+        "loss": {"value": "huber"},
+        "epochs": {"value": 1},
+        "batch_size": {"value": 128},
+        "learning_rate": {"values": [0.1, 0.01]},
+    },
+}
+
+
+def run(config=None) -> None:
     """Kick off training."""
-    if cfg["WANDB_LOG"]:
-        wandb.init(project=cfg["WANDB_PROJECT_NAME"], name=cfg["WANDB_RUN_NAME"], dir=cfg["RESULTS_PATH"], config=cfg)
+    with wandb.init(
+        config=config,
+        project=fixed_cfg["WANDB_PROJECT_NAME"],
+        name=fixed_cfg["WANDB_RUN_NAME"],
+        dir=fixed_cfg["RESULTS_PATH"],
+    ):
+        config = wandb.config  # this config will be set by Sweep Controller
 
-    # Loss function
-    loss_func = nn.HuberLoss()
-    torch.manual_seed(cfg["SEED"])
-    torch.cuda.manual_seed(cfg["SEED"])
+        if not os.path.exists(fixed_cfg["RESULTS_PATH"]):
+            os.makedirs(fixed_cfg["RESULTS_PATH"])
 
-    if not os.path.exists(cfg["RESULTS_PATH"]):
-        os.makedirs(cfg["RESULTS_PATH"])
+        # Load data
+        data = DrugResponseDataset(fixed_cfg["DATA_PATH"])
+        train_id, val_id, test_id = split_data_by_cell_line_ids(data.targets, seed=fixed_cfg["SEED"])
+        train_sampler, val_sampler = DataloaderSampler(train_id), DataloaderSampler(val_id)
+        standardize_molecular_data_inplace(data, train_id, val_id, test_id)
+        logger.info("Finished Loading Data")
 
-    # Load data
-    data = DrugResponseDataset(cfg["DATA_PATH"])
-    train_id, val_id, test_id = split_data_by_cell_line_ids(data.targets, seed=cfg["SEED"])
-    train_sampler, val_sampler = DataloaderSampler(train_id), DataloaderSampler(val_id)
-    standardize_molecular_data_inplace(data, train_id, val_id, test_id)
+        train_loader, val_loader = build_dataloader(
+            data, train_sampler, val_sampler, config.batch_size, fixed_cfg["NUM_WORKERS"]
+        )
 
-    train_loader = DataLoader(
-        data,
-        sampler=train_sampler,
-        batch_size=cfg["BATCH_SIZE"],
-        pin_memory=True,
-        num_workers=cfg["NUM_WORKERS"],
-        persistent_workers=True,
-    )
-    val_loader = DataLoader(
-        data,
-        sampler=val_sampler,
-        batch_size=cfg["BATCH_SIZE"],
-        pin_memory=True,
-        num_workers=cfg["NUM_WORKERS"],
-        persistent_workers=True,
-    )
-
-    # Determine whether to initialize a new model from scratch or resume training from a checkpoint
-    best_val_loss = 1e9
-    iter_num = 0
-    if cfg["INIT_FROM"] == "scratch":
-        logger.info("Training model from scratch.")
+        best_val_loss = 1e9
         model = Interaction_Model(data)
-        model.train().to(cfg["DEVICE"])
-        # Setup optimizers
-        optimizer1 = SGD(
-            model.nn1.parameters(), lr=cfg["LEARNING_RATE"], weight_decay=cfg["WEIGHT_DECAY"], momentum=cfg["MOMENTUM"]
-        )
-        optimizer2 = SGD(
-            model.nn2.parameters(), lr=cfg["LEARNING_RATE"], weight_decay=cfg["WEIGHT_DECAY"], momentum=cfg["MOMENTUM"]
-        )
-    elif cfg["INIT_FROM"] == "resume":
-        logger.info(f"Resuming training from {cfg['RESULTS_PATH']}/ckpt.pt")
-        # Load checkpoint
-        ckpt_path = os.path.join(cfg["RESULTS_PATH"], "ckpt.pt")
-        checkpoint = torch.load(ckpt_path)
-        # Initialize model with the same configuration as the checkpoint
-        model = Interaction_Model(data)
-        model.train().to(cfg["DEVICE"])
-        model.load_state_dict(checkpoint["model"])
-        # Setup optimizers
-        optimizer1 = SGD(
-            model.nn1.parameters(), lr=cfg["LEARNING_RATE"], weight_decay=cfg["WEIGHT_DECAY"], momentum=cfg["MOMENTUM"]
-        )
-        optimizer2 = SGD(
-            model.nn2.parameters(), lr=cfg["LEARNING_RATE"], weight_decay=cfg["WEIGHT_DECAY"], momentum=cfg["MOMENTUM"]
-        )
-        # Also load optimizer states if needed
-        optimizer1.load_state_dict(checkpoint["optimizer 1"])
-        optimizer2.load_state_dict(checkpoint["optimizer 2"])
-        # Update best validation loss
-        best_val_loss = checkpoint["best_val_loss"]
-        iter_num = checkpoint["iter_num"]
-        model.train().to(cfg["DEVICE"])
-    else:
-        raise ValueError("init_from must be either 'scratch' or 'resume'")
+        model.train().to(device)
+        optimizer1, optimizer2 = set_optimizers(model, config.optimizer, config.learning_rate)
 
-    # Set Learning Rate scheduler
-    scheduler1 = ExponentialLR(optimizer1, gamma=0.9)
-    scheduler2 = ExponentialLR(optimizer2, gamma=0.9)
+        # Set Learning Rate scheduler and loss function
+        scheduler1, scheduler2 = set_schedulers(config.scheduler, optimizer1, optimizer2)
+        loss_func = set_loss(config.loss)
 
-    train(
-        model=model,
-        loss_func=loss_func,
-        optimizers=(optimizer1, optimizer2),
-        schedulers=(scheduler1, scheduler2),
-        train_loader=train_loader,
-        val_loader=val_loader,
-        cfg=cfg,
-        iter_num=iter_num,
-        best_val_loss=best_val_loss,
-    )
-
-    # Finish the wandb run
-    if cfg["WANDB_LOG"]:
-        wandb.finish()
+        train(
+            model=model,
+            loss_func=loss_func,
+            optimizers=(optimizer1, optimizer2),
+            schedulers=(scheduler1, scheduler2),
+            train_loader=train_loader,
+            val_loader=val_loader,
+            fixed_cfg=fixed_cfg,
+            device=device,
+            best_val_loss=best_val_loss,
+            epochs=config.epochs,
+        )
 
 
 def train(
@@ -136,9 +117,10 @@ def train(
     schedulers: Tuple[_LRScheduler, _LRScheduler],
     train_loader: DataLoader,
     val_loader: DataLoader,
-    cfg: Dict,
-    iter_num: int = 0,
+    fixed_cfg: Dict,
+    device,
     best_val_loss: int = 1e9,
+    epochs: int = 1,
 ):
     """Train DruxAI Network end-to-end.
 
@@ -150,111 +132,67 @@ def train(
         train_loader (DataLoader): DataLoader for the training dataset.
         val_loader (DataLoader): DataLoader for the validation dataset.
         cfg (Dict): A dictionary containing configuration parameters for training.
-        iter_num (int, optional): The current iteration number. Defaults to 0.
+        device (str or torch.device, optional): The device to run the computations on ('cpu' or 'cuda').
         best_val_loss (int, optional): The best validation loss obtained during training. Defaults to 1e9.
-    """
-    metric_train_loss = MeanMetric().to(cfg["DEVICE"])
-    metric_val_loss = MeanMetric().to(cfg["DEVICE"])
-    metric_train_rscore = SpearmanCorrCoef().to(cfg["DEVICE"])
-    metric_val_rscore = SpearmanCorrCoef().to(cfg["DEVICE"])
+        epochs (int): Number of epochs to train the model for.
 
+    """
     optimizer1, optimizer2 = optimizers[0], optimizers[1]
     scheduler1, scheduler2 = schedulers[0], schedulers[1]
-    start_time = time.time()
-    for epoch in range(cfg["EPOCHS"]):
+    metric_train_loss = MeanMetric().to(device)
+    metric_train_rscore = SpearmanCorrCoef().to(device)
+    for epoch in range(epochs):
+
         model.train()
-        for X, y, _ in tqdm(train_loader, leave=False):
+        for iter_num, (X, y, _) in enumerate(tqdm(train_loader, leave=False)):
             drug, molecular, outcome = (
-                X["drug_encoding"].to(cfg["DEVICE"]),
-                X["gene_expression"].to(cfg["DEVICE"]),
-                y.to(cfg["DEVICE"]),
+                X["drug_encoding"].to(device),
+                X["gene_expression"].to(device),
+                y.to(device),
             )
 
             optimizer1.zero_grad()
             optimizer2.zero_grad()
 
-            prediction = model.forward(drug, molecular)
-            loss = loss_func(prediction, outcome)
-            metric_train_loss(loss)
+            prediction = model(drug, molecular)
+            train_loss = loss_func(prediction, outcome)
+
+            metric_train_loss(train_loss)
             metric_train_rscore(prediction, outcome)
-            loss.backward()
-            clip_grad_norm_(model.parameters(), cfg["GRAD_CLIP"])
-            # Randomly select optimizer
+
+            train_loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), fixed_cfg["GRAD_CLIP"])
             selected_optimizer = optimizer1 if torch.rand(1) < 0.5 else optimizer2
             selected_optimizer.step()
 
-            if (iter_num % cfg["EVAL_INTERVAL"] == 0) & (iter_num != 0):
-                # ------------------------------------------------------------------------------
-                # TEST LOOP
-                # ------------------------------------------------------------------------------
-                model.eval()
-                for X, y, _ in tqdm(val_loader, leave=False):
-                    drug, molecular, outcome = (
-                        X["drug_encoding"].to(cfg["DEVICE"]),
-                        X["gene_expression"].to(cfg["DEVICE"]),
-                        y.to(cfg["DEVICE"]),
-                    )
-
-                    with torch.no_grad():
-                        prediction = model(drug, molecular)
-                        batch_loss = loss_func(outcome, prediction)
-
-                        metric_val_loss(batch_loss)
-                        metric_val_rscore(prediction, outcome)
-
-                # Compute epoch metrics from cached batch metrics. Take absolute values of R Scores for eval!
-                train_loss = float(metric_train_loss.compute())
-                val_loss = float(metric_val_loss.compute())
-                train_rscore = float(abs(metric_train_rscore.compute()))
-                val_rscore = float(abs(metric_val_rscore.compute()))
-
-                # Reset metrics for next evaluation interval
-                metric_train_loss.reset()
-                metric_val_loss.reset()
-                metric_train_rscore.reset()
-                metric_val_rscore.reset()
-                # Calculate run time until evaluation
-                elapsed_time = time.time() - start_time
-                hours = int(elapsed_time // 3600)
-
-                if cfg["WANDB_LOG"]:
-                    wandb.log(
-                        {
-                            "iter": iter_num,
-                            "epoch": epoch,
-                            "timestamp": hours,
-                            "train loss": train_loss,
-                            "val_loss": val_loss,
-                            "r2_train": train_rscore,
-                            "r2_val": val_rscore,
-                            "lr_opt1": optimizer1.param_groups[0]["lr"],
-                            "lr_opt2": optimizer2.param_groups[0]["lr"],
-                        }
-                    )
+            if (iter_num % fixed_cfg["EVAL_INTERVAL"] == 0) & (iter_num != 0):
+                avg_train_loss = metric_train_loss.compute()
+                train_rscore = metric_train_rscore.compute()
+                val_loss, val_rscore = evaluate(model, val_loader, loss_func, device)
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
-                    checkpoint = {
-                        "model": model.state_dict(),
-                        "optimizer 1": optimizer1.state_dict(),
-                        "optimizer 2": optimizer2.state_dict(),
-                        "iter_num": iter_num,
-                        "epoch": epoch,
-                        "best_val_loss": best_val_loss,
-                        "config": cfg,
+                    # save_checkpoint(model, optimizer1, optimizer2, iter_num, best_val_loss, fixed_cfg, logger)
+                wandb.log(
+                    {
+                        "iter": iter_num,
+                        "train loss": avg_train_loss,
+                        "val_loss": val_loss,
+                        "r2_train": train_rscore,
+                        "r2_val": val_rscore,
+                        "lr_opt1": optimizer1.param_groups[0]["lr"],
+                        "lr_opt2": optimizer2.param_groups[0]["lr"],
                     }
-                    logger.info(
-                        f"New best val_loss achieved! \n"
-                        f"Epoch: {epoch} "
-                        f"Train Loss: {train_loss:.4f}; Train R2: {train_rscore:.4f} "
-                        f"Val Loss: {best_val_loss:.4f}; Val R2: {val_rscore:.4f} \n"
-                        f"Saving checkpoint to {os.path.join(cfg['RESULTS_PATH'], 'ckpt.pt')}"
-                    )
-                    torch.save(checkpoint, os.path.join(cfg["RESULTS_PATH"], "ckpt.pt"))
-            iter_num += 1
+                )
+                metric_train_loss.reset()
+                metric_train_rscore.reset()
 
-        if cfg["DECAY_LR"]:
+            wandb.log({"epoch": epoch})
+
+        if fixed_cfg["DECAY_LR"]:
             scheduler1.step()
             scheduler2.step()
+
+    wandb.finish()
 
 
 def check_cuda_devices(logger):
@@ -284,26 +222,14 @@ def read_yml(filepath: str) -> dict:
 
 def main() -> None:
     """Execute main func."""
-    # Get correct config file over command line.
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        default="/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/results/training/config.yml",
-        type=str,
-    )
-    args = parser.parse_args()
-
-    # Read yml file to memory as dict.
-    cfg = read_yml(args.config)
-
-    logger = _setup_logger(log_path=cfg["RESULTS_PATH"])
-
     # Get information about allocated GPUs
     check_cuda_devices(logger)
 
-    # Start training with chosen configuration.
-    run(cfg, logger)
+    # Start a sweep with the defined sweep configuration
+    sweep_id = wandb.sweep(sweep_config, project="test Sweep DruxAI")
+
+    # Run the sweep
+    wandb.agent(sweep_id, function=run, count=2)
 
 
 if __name__ == "__main__":
