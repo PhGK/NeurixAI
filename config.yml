@@ -10,9 +10,15 @@ WANDB_RUN_NAME: "druxai-run-sgd"
 # Fixed params
 SEED: 1337
 NUM_WORKERS: 6
-DECAY_LR: True # whether to decay the learning rate
 GRAD_CLIP: 1.0
 EVAL_INTERVAL: 1000 # after how many iterations we evaluate, and how many train_loss uses to approximate
 MOMENTUM: 0.9
 BETA1: 0.9
 BETA2: 0.95
+
+EPOCHS: 2
+LEARNING_RATE: 0.05
+DECAY_LR: True # whether to decay the learning rate
+MIN_LR: 0.000001 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+OPTIMIZER: "SGD" # this is only for wandb logging; to set optimizer you need to change code
+WEIGHT_DECAY: 0.00001

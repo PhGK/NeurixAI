@@ -8,7 +8,6 @@ from typing import Dict, Tuple
 
 import torch
 import torch.nn as nn
-import wandb
 import yaml
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import SGD, Optimizer
@@ -20,6 +19,7 @@ from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
 )
 from tqdm import tqdm
 
+import wandb
 from druxai._logging import _setup_logger, logger
 from druxai.models.NN_minimal import Interaction_Model
 from druxai.utils.data import DataloaderSampler, DrugResponseDataset
