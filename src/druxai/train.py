@@ -51,12 +51,12 @@ set_seeds()
 
 sweep_config = {
     "method": "random",
-    "metric": {"name": "loss", "goal": "minimize"},
+    "metric": {"name": "r2_val", "goal": "maximize"},
     "parameters": {
         "optimizer": {"values": ["sgd"]},
         "scheduler": {"value": "exponential"},
         "loss": {"value": "huber"},
-        "epochs": {"value": 1},
+        "epochs": {"value": 2},
         "batch_size": {"value": 128},
         "learning_rate": {"values": [0.1, 0.01]},
     },
@@ -67,8 +67,6 @@ def run(config=None) -> None:
     """Kick off training."""
     with wandb.init(
         config=config,
-        project=fixed_cfg["WANDB_PROJECT_NAME"],
-        name=fixed_cfg["WANDB_RUN_NAME"],
         dir=fixed_cfg["RESULTS_PATH"],
     ):
         config = wandb.config  # this config will be set by Sweep Controller
@@ -78,7 +76,7 @@ def run(config=None) -> None:
 
         # Load data
         data = DrugResponseDataset(fixed_cfg["DATA_PATH"])
-        train_id, val_id, test_id = split_data_by_cell_line_ids(data.targets, seed=fixed_cfg["SEED"])
+        train_id, val_id, test_id = split_data_by_cell_line_ids(data.targets, seed=1337)
         train_sampler, val_sampler = DataloaderSampler(train_id), DataloaderSampler(val_id)
         standardize_molecular_data_inplace(data, train_id, val_id, test_id)
         logger.info("Finished Loading Data")
@@ -141,10 +139,13 @@ def train(
     scheduler1, scheduler2 = schedulers[0], schedulers[1]
     metric_train_loss = MeanMetric().to(device)
     metric_train_rscore = SpearmanCorrCoef().to(device)
+
+    # Track gradients
+    wandb.watch(model)
     for epoch in range(epochs):
 
         model.train()
-        for iter_num, (X, y, _) in enumerate(tqdm(train_loader, leave=False)):
+        for X, y, _ in tqdm(train_loader, leave=False):
             drug, molecular, outcome = (
                 X["drug_encoding"].to(device),
                 X["gene_expression"].to(device),
@@ -165,32 +166,30 @@ def train(
             selected_optimizer = optimizer1 if torch.rand(1) < 0.5 else optimizer2
             selected_optimizer.step()
 
-            if (iter_num % fixed_cfg["EVAL_INTERVAL"] == 0) & (iter_num != 0):
-                avg_train_loss = metric_train_loss.compute()
-                train_rscore = metric_train_rscore.compute()
-                val_loss, val_rscore = evaluate(model, val_loader, loss_func, device)
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    # save_checkpoint(model, optimizer1, optimizer2, iter_num, best_val_loss, fixed_cfg, logger)
-                wandb.log(
-                    {
-                        "iter": iter_num,
-                        "train loss": avg_train_loss,
-                        "val_loss": val_loss,
-                        "r2_train": train_rscore,
-                        "r2_val": val_rscore,
-                        "lr_opt1": optimizer1.param_groups[0]["lr"],
-                        "lr_opt2": optimizer2.param_groups[0]["lr"],
-                    }
-                )
-                metric_train_loss.reset()
-                metric_train_rscore.reset()
+        avg_train_loss = metric_train_loss.compute()
+        train_rscore = metric_train_rscore.compute()
+        val_loss, val_rscore = evaluate(model, val_loader, loss_func, device)
 
-            wandb.log({"epoch": epoch})
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            # save_checkpoint(model, optimizer1, optimizer2, iter_num, best_val_loss, fixed_cfg, logger)
 
-        if fixed_cfg["DECAY_LR"]:
-            scheduler1.step()
-            scheduler2.step()
+        wandb.log(
+            {
+                "epoch": epoch,
+                "train loss": avg_train_loss,
+                "val_loss": val_loss,
+                "r2_train": train_rscore,
+                "r2_val": val_rscore,
+                "lr_opt1": optimizer1.param_groups[0]["lr"],
+                "lr_opt2": optimizer2.param_groups[0]["lr"],
+            }
+        )
+
+        metric_train_loss.reset()
+        metric_train_rscore.reset()
+        scheduler1.step()
+        scheduler2.step()
 
     wandb.finish()
 
@@ -226,7 +225,7 @@ def main() -> None:
     check_cuda_devices(logger)
 
     # Start a sweep with the defined sweep configuration
-    sweep_id = wandb.sweep(sweep_config, project="test Sweep DruxAI")
+    sweep_id = wandb.sweep(sweep_config, project=fixed_cfg["SWEEPNAME"])
 
     # Run the sweep
     wandb.agent(sweep_id, function=run, count=2)

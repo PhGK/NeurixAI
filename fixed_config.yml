@@ -3,14 +3,9 @@ RESULTS_PATH: "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/results/training"
 PROJECT_PATH: "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI"
 DATA_PATH: "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/data/preprocessed"
 
-INIT_FROM: "scratch" # Use "resume" from os.path.join(RESULTS_PATH, "ckpt.pt") for pretrained weights
-
 # wandb logging
-WANDB_PROJECT_NAME: "druxai"
-WANDB_RUN_NAME: "druxai-run-sgd"
+SWEEPNAME: "DruxAI Hyperparameter Sweep"
 
 # fixed params
-SEED: 1337
 GRAD_CLIP: 1.0
 NUM_WORKERS: 6
-EVAL_INTERVAL: 1000
