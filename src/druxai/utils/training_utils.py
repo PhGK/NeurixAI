@@ -189,7 +189,7 @@ def evaluate(
     return val_loss, val_rscore
 
 
-def save_checkpoint(model, optimizer1, optimizer2, iter_num, best_val_loss, fixed_cfg, logger):
+def save_checkpoint(model, optimizer1, optimizer2, epoch, best_val_loss, fixed_cfg, logger):
     """
     Save the model checkpoint.
 
@@ -198,7 +198,7 @@ def save_checkpoint(model, optimizer1, optimizer2, iter_num, best_val_loss, fixe
         model: The model to save.
         optimizer1: Optimizer for the first part of the model.
         optimizer2: Optimizer for the second part of the model.
-        iter_num: Current iteration number.
+        epoch: Current epoch number.
         best_val_loss: Best validation loss achieved during training.
         fixed_cfg: Fixed configuration parameters.
         logger: Logger for logging.
@@ -207,7 +207,7 @@ def save_checkpoint(model, optimizer1, optimizer2, iter_num, best_val_loss, fixe
         "model": model.state_dict(),
         "optimizer1": optimizer1.state_dict(),
         "optimizer2": optimizer2.state_dict(),
-        "iter_num": iter_num,
+        "iter_num": epoch,
         "best_val_loss": best_val_loss,
         "config": fixed_cfg,
     }
