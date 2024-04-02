@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 import wandb
 from druxai._logging import _setup_logger
-from druxai.models.NN_minimal import Interaction_Model
+from druxai.models.NN_flexible import Interaction_Model
 from druxai.utils.data import DataloaderSampler, DrugResponseDataset
 from druxai.utils.dataframe_utils import (
     split_data_by_cell_line_ids,
@@ -50,15 +50,25 @@ device = get_ops_device_string()
 set_seeds()
 
 sweep_config = {
-    "method": "random",
+    "method": "bayes",
     "metric": {"name": "r2_val", "goal": "maximize"},
+    "early_terminate": {
+        "type": "hyperband",
+        "min_iter": 5,
+        "max_iter": 50,
+    },
     "parameters": {
-        "optimizer": {"values": ["sgd"]},
-        "scheduler": {"value": "exponential"},
-        "loss": {"value": "huber"},
-        "epochs": {"value": 2},
-        "batch_size": {"value": 128},
-        "learning_rate": {"values": [0.1, 0.01]},
+        "optimizer": {"values": ["sgd", "adam"]},
+        "scheduler": {"values": ["exponential", "plateau"]},
+        "loss": {"values": ["huber", "mse"]},
+        "epochs": {"values": [5, 10, 25, 50]},
+        "batch_size": {"values": [32, 64, 128]},
+        "learning_rate": {"values": [0.1, 0.01, 0.05, 0.001]},
+        "output_features": {"value": 1000},
+        "hidden_dims_nn1": {"values": [[5000], [10000], [1000, 100], [128, 64], [256, 128]]},
+        "hidden_dims_nn2": {"values": [[10000], [5000], [1000, 100], [128, 64], [256, 128]]},
+        "dropout_nn1": {"values": [0.1, 0.2, 0.3]},
+        "dropout_nn2": {"values": [0.1, 0.2, 0.3]},
     },
 }
 
@@ -86,7 +96,14 @@ def run(config=None) -> None:
         )
 
         best_val_loss = 1e9
-        model = Interaction_Model(data)
+        model = Interaction_Model(
+            data,
+            config.output_features,
+            config.hidden_dims_nn1,
+            config.hidden_dims_nn2,
+            config.dropout_nn1,
+            config.dropout_nn2,
+        )
         model.train().to(device)
         optimizer1, optimizer2 = set_optimizers(model, config.optimizer, config.learning_rate)
 
