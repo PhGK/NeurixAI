@@ -1,6 +1,7 @@
-"""Training script. To run it do: $ python train.py --batch_size=32."""
+"""Training script. To run it do: $ python train.py."""
 
 import os
+from types import SimpleNamespace
 from typing import Dict, Tuple
 
 import torch
@@ -29,6 +30,7 @@ from druxai.utils.training_utils import (
     evaluate,
     get_ops_device_string,
     load_yaml,
+    save_checkpoint,
     set_loss,
     set_optimizers,
     set_schedulers,
@@ -49,28 +51,21 @@ device = get_ops_device_string()
 # Set seeds
 set_seeds()
 
-sweep_config = {
-    "method": "bayes",
+config = {
     "metric": {"name": "r2_val", "goal": "maximize"},
-    "early_terminate": {
-        "type": "hyperband",
-        "min_iter": 5,
-        "max_iter": 50,
-    },
-    "parameters": {
-        "optimizer": {"values": ["sgd", "adam"]},
-        "scheduler": {"values": ["exponential"]},
-        "loss": {"values": ["huber", "mse"]},
-        "epochs": {"values": [5, 10, 25, 50]},
-        "batch_size": {"values": [32, 64, 128]},
-        "learning_rate": {"values": [0.1, 0.01, 0.05, 0.001]},
-        "output_features": {"value": 1000},
-        "hidden_dims_nn1": {"values": [[5000], [10000], [1000, 100], [128, 64], [256, 128]]},
-        "hidden_dims_nn2": {"values": [[10000], [5000], [1000, 100], [128, 64], [256, 128]]},
-        "dropout_nn1": {"values": [0.1, 0.2, 0.3]},
-        "dropout_nn2": {"values": [0.1, 0.2, 0.3]},
-    },
+    "optimizer": "sgd",
+    "scheduler": "exponential",
+    "loss": "huber",
+    "epochs": 50,
+    "batch_size": 32,
+    "learning_rate": 0.1,
+    "output_features": 256,
+    "hidden_dims_nn1": [512],
+    "hidden_dims_nn2": [512],
+    "dropout_nn1": 0.1,
+    "dropout_nn2": 0.1,
 }
+config = SimpleNamespace(**config)
 
 
 def run(config=None) -> None:
@@ -79,8 +74,6 @@ def run(config=None) -> None:
         config=config,
         dir=fixed_cfg["RESULTS_PATH"],
     ):
-        config = wandb.config  # this config will be set by Sweep Controller
-
         if not os.path.exists(fixed_cfg["RESULTS_PATH"]):
             os.makedirs(fixed_cfg["RESULTS_PATH"])
 
@@ -189,7 +182,7 @@ def train(
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             logger.info(f"New best val_loss achieved! \n" f"Epoch: {epoch}; Val Loss: {best_val_loss:.4f}")
-            # save_checkpoint(model, optimizer1, optimizer2, iter_num, best_val_loss, fixed_cfg, logger)
+            save_checkpoint(model, optimizer1, optimizer2, epoch, best_val_loss, fixed_cfg, logger)
 
         wandb.log(
             {
@@ -241,11 +234,8 @@ def main() -> None:
     # Get information about allocated GPUs
     check_cuda_devices(logger)
 
-    # Start a sweep with the defined sweep configuration
-    sweep_id = wandb.sweep(sweep_config, project=fixed_cfg["SWEEPNAME"])
-
-    # Run the sweep
-    wandb.agent(sweep_id, function=run, count=2)
+    # Run training
+    run(config=config)
 
 
 if __name__ == "__main__":
