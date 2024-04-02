@@ -18,6 +18,8 @@
 # ignore prettier cache
 /node_modules/*
 
+logfile.log
+
 # Distribution / packaging
 .Python
 build/
