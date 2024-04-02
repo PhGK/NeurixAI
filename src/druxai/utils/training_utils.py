@@ -6,7 +6,7 @@ from typing import Dict, Tuple
 import torch
 import yaml
 from torch.optim import SGD, Adam, Optimizer
-from torch.optim.lr_scheduler import ExponentialLR, _LRScheduler
+from torch.optim.lr_scheduler import ExponentialLR, ReduceLROnPlateau, _LRScheduler
 from torch.utils.data import DataLoader
 from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
     MeanMetric,
@@ -109,7 +109,9 @@ def set_schedulers(scheduler: str, optimizer1: Optimizer, optimizer2: Optimizer)
     if scheduler == "exponential":
         scheduler1 = ExponentialLR(optimizer1, gamma=0.9)
         scheduler2 = ExponentialLR(optimizer2, gamma=0.9)
-    # Add more conditions for other scheduler types if needed
+    elif scheduler == "plateau":
+        scheduler1 = ReduceLROnPlateau(optimizer1, mode="min", factor=0.1, patience=10)
+        scheduler2 = ReduceLROnPlateau(optimizer2, mode="min", factor=0.1, patience=10)
     else:
         raise ValueError(f"Unknown scheduler: {scheduler}.")
 
