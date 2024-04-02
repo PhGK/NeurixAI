@@ -59,7 +59,7 @@ sweep_config = {
     },
     "parameters": {
         "optimizer": {"values": ["sgd", "adam"]},
-        "scheduler": {"values": ["exponential", "plateau"]},
+        "scheduler": {"values": ["exponential"]},
         "loss": {"values": ["huber", "mse"]},
         "epochs": {"values": [5, 10, 25, 50]},
         "batch_size": {"values": [32, 64, 128]},
