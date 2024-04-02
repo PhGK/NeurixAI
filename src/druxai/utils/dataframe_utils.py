@@ -10,6 +10,9 @@ from pandas import DataFrame
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 
 from druxai.utils.data import DrugResponseDataset
+from druxai.utils.set_seeds import set_seeds
+
+set_seeds()
 
 
 def create_batch_result(outcome: Tensor, prediction: Tensor, ds: Any, idx: Any, epoch: int) -> DataFrame:

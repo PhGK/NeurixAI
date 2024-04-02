@@ -10,6 +10,9 @@ from torch.utils.data.sampler import Sampler
 import pandas as pd
 
 from druxai._logging import logger
+from druxai.utils.set_seeds import set_seeds
+
+set_seeds()
 
 
 class DrugResponseDataset(Dataset):

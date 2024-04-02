@@ -4,7 +4,7 @@ import os
 __all__ = ["logger"]
 
 
-def _setup_logger(log_path="../../logs/") -> "logging.Logger":
+def _setup_logger(log_path="../logs/") -> "logging.Logger":
 
     from rich.console import Console
     from rich.logging import RichHandler
