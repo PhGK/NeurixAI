@@ -7,6 +7,7 @@ from torch import Tensor
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
+from sklearn.model_selection import KFold
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 
 from druxai.utils.data import DrugResponseDataset
@@ -42,7 +43,6 @@ def create_batch_result(outcome: Tensor, prediction: Tensor, ds: Any, idx: Any, 
     )
 
 
-# TODO: Write test to check that splits are actually unique for the cell lines!
 def split_data_by_cell_line_ids(
     dataframe: pd.DataFrame, train_pct: float = 0.7, test_pct: float = 0.15, val_pct: float = 0.15, seed: int = 42
 ) -> Tuple[List[int], List[int], List[int]]:
@@ -100,6 +100,48 @@ def split_data_by_cell_line_ids(
     test_ids = pd.concat(test_dfs).index.to_list()
 
     return train_ids, val_ids, test_ids
+
+
+def k_fold_split_data_by_cell_lines_ids(
+    df: pd.DataFrame, n_splits: int = 5, seed: int = 42
+) -> Tuple[List[List[int]], List[List[int]]]:
+    """
+    Perform K-fold cross-validation on a DataFrame.
+
+    It ensures that all instances of a particular cell line,
+    regardless of the drug, are in either the training set or the validation set, but not both.
+
+    Parameters
+    ----------
+    df (pd.DataFrame): The DataFrame to split, which must contain a 'cell_line' column.
+    n_splits (int): The number of folds for the cross-validation. Default is 5.
+    seed (int): The seed for the random number generator. Default is 42.
+
+    Returns
+    -------
+    Tuple[List[List[int]], List[List[int]]]: A tuple containing two lists of lists of integers.
+    The first list contains the indices of the training sets for each fold, and the second list contains
+    the indices of the validation sets for each fold.
+    """
+    # Step 1: Get unique cell lines
+    unique_cell_lines = df["cell_line"].unique()
+
+    # Step 2: Initialize the KFold object
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
+
+    # Step 3: Initialize lists to keep track of train and test sets
+    train_ids, test_ids = [], []
+
+    # Step 4: Perform K-fold cross-validation on the unique cell lines
+    for train_index, test_index in kf.split(unique_cell_lines):
+        train_cell_lines = unique_cell_lines[train_index]
+        test_cell_lines = unique_cell_lines[test_index]
+
+        # Get the indices of the instances of the cell lines in the train and test sets
+        train_ids.append(df[df["cell_line"].isin(train_cell_lines)].index.to_list())
+        test_ids.append(df[df["cell_line"].isin(test_cell_lines)].index.to_list())
+
+    return train_ids, test_ids
 
 
 def standardize_molecular_data_inplace(
