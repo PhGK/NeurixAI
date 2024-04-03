@@ -1,11 +1,13 @@
 """Functions which modularize the train.py file."""
 
+import logging
 import os
 from argparse import Namespace
 from typing import Any, Dict, Tuple
 
 import torch
 import yaml
+from torch.nn import Module
 from torch.optim import SGD, Adam, Optimizer
 from torch.optim.lr_scheduler import ExponentialLR, _LRScheduler
 from torch.utils.data import DataLoader
@@ -190,7 +192,16 @@ def evaluate(
     return val_loss, val_rscore
 
 
-def save_checkpoint(model, optimizer1, optimizer2, epoch, best_val_loss, fixed_cfg, logger):
+def save_checkpoint(
+    model: Module,
+    optimizer1: Optimizer,
+    optimizer2: Optimizer,
+    epoch: int,
+    best_val_loss: float,
+    fixed_cfg: Dict[str, Any],
+    logger: logging.Logger,
+    save_model: bool = True,
+):
     """
     Save the model checkpoint.
 
@@ -203,18 +214,24 @@ def save_checkpoint(model, optimizer1, optimizer2, epoch, best_val_loss, fixed_c
         best_val_loss: Best validation loss achieved during training.
         fixed_cfg: Fixed configuration parameters.
         logger: Logger for logging.
+        save_model: Whether to save the model or not.
     """
-    checkpoint = {
-        "model": model.state_dict(),
-        "optimizer1": optimizer1.state_dict(),
-        "optimizer2": optimizer2.state_dict(),
-        "iter_num": epoch,
-        "best_val_loss": best_val_loss,
-        "config": fixed_cfg,
-    }
-    checkpoint_path = os.path.join(fixed_cfg["RESULTS_PATH"], "ckpt.pt")
-    torch.save(checkpoint, checkpoint_path)
-    logger.info(f"Epoch: {epoch} new best val_loss: {best_val_loss:.4f}\n" f"Saving checkpoint to {checkpoint_path}")
+    if save_model:
+        checkpoint = {
+            "model": model.state_dict() if save_model else None,
+            "optimizer1": optimizer1.state_dict(),
+            "optimizer2": optimizer2.state_dict(),
+            "iter_num": epoch,
+            "best_val_loss": best_val_loss,
+            "config": fixed_cfg,
+        }
+        checkpoint_path = os.path.join(fixed_cfg["RESULTS_PATH"], "ckpt.pt")
+        torch.save(checkpoint, checkpoint_path)
+        logger.info(
+            f"Epoch: {epoch} new best val_loss: {best_val_loss:.4f}\n" f"Saving checkpoint to {checkpoint_path}"
+        )
+
+    logger.info(f"Epoch: {epoch} new best val_loss: {best_val_loss:.4f}\n")
 
 
 def load_yaml(filename: str) -> Dict:
@@ -249,7 +266,7 @@ def setup_training(
     cfg: Namespace, data: Any, logger: Any, fixed_cfg: dict, device: torch.device
 ) -> Tuple[Interaction_Model, SGD, SGD, float, int]:
     """
-    Set up the training process based on the configuration.
+    Set up the training process based on the configuration and preloads weights if needed.
 
     Args:
         cfg (Namespace): The configuration namespace.
