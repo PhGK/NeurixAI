@@ -6,7 +6,6 @@ from typing import Dict, Tuple
 
 import torch
 import torch.nn as nn
-import yaml
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader
@@ -18,7 +17,6 @@ from tqdm import tqdm
 
 import wandb
 from druxai._logging import _setup_logger
-from druxai.models.NN_flexible import Interaction_Model
 from druxai.utils.data import DataloaderSampler, DrugResponseDataset
 from druxai.utils.dataframe_utils import (
     split_data_by_cell_line_ids,
@@ -27,13 +25,12 @@ from druxai.utils.dataframe_utils import (
 from druxai.utils.set_seeds import set_seeds
 from druxai.utils.training_utils import (
     build_dataloader,
+    check_cuda_devices,
     evaluate,
     get_ops_device_string,
     load_yaml,
     save_checkpoint,
-    set_loss,
-    set_optimizers,
-    set_schedulers,
+    setup_training,
 )
 
 # added to not get AttributeError: module '__main__' has no attribute '__spec__'
@@ -41,6 +38,24 @@ __spec__ = None
 
 # SET THIS PATH TO YOUR FIXED CONFIG FILE DIRECTORY
 fixed_cfg = load_yaml("/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/fixed_config.yml")
+
+# SET THESE CONFIG PARAMETERS
+config = {
+    "metric": {"name": "r2_val", "goal": "maximize"},
+    "resume": False,
+    "patience": 5,
+    "epochs": 20,
+    "optimizer": "sgd",
+    "scheduler": "exponential",
+    "loss": "huber",
+    "batch_size": 128,
+    "learning_rate": 0.1,
+    "output_features": 256,
+    "hidden_dims_nn1": [512],
+    "hidden_dims_nn2": [512],
+    "dropout_nn1": 0.1,
+    "dropout_nn2": 0.1,
+}
 
 # Create logger
 logger = _setup_logger(log_path=fixed_cfg["RESULTS_PATH"])
@@ -51,26 +66,14 @@ device = get_ops_device_string()
 # Set seeds
 set_seeds()
 
-config = {
-    "metric": {"name": "r2_val", "goal": "maximize"},
-    "optimizer": "sgd",
-    "scheduler": "exponential",
-    "loss": "huber",
-    "epochs": 50,
-    "batch_size": 32,
-    "learning_rate": 0.1,
-    "output_features": 256,
-    "hidden_dims_nn1": [512],
-    "hidden_dims_nn2": [512],
-    "dropout_nn1": 0.1,
-    "dropout_nn2": 0.1,
-}
+# Create Namespace for config
 config = SimpleNamespace(**config)
 
 
 def run(config=None) -> None:
     """Kick off training."""
     with wandb.init(
+        name=fixed_cfg["EXPERIMENT_NAME"],
         config=config,
         dir=fixed_cfg["RESULTS_PATH"],
     ):
@@ -88,21 +91,9 @@ def run(config=None) -> None:
             data, train_sampler, val_sampler, config.batch_size, fixed_cfg["NUM_WORKERS"]
         )
 
-        best_val_loss = 1e9
-        model = Interaction_Model(
-            data,
-            config.output_features,
-            config.hidden_dims_nn1,
-            config.hidden_dims_nn2,
-            config.dropout_nn1,
-            config.dropout_nn2,
+        model, optimizer1, optimizer2, scheduler1, scheduler2, loss_func, best_val_loss = setup_training(
+            config, data, logger, fixed_cfg, device
         )
-        model.train().to(device)
-        optimizer1, optimizer2 = set_optimizers(model, config.optimizer, config.learning_rate)
-
-        # Set Learning Rate scheduler and loss function
-        scheduler1, scheduler2 = set_schedulers(config.scheduler, optimizer1, optimizer2)
-        loss_func = set_loss(config.loss)
 
         train(
             model=model,
@@ -151,6 +142,9 @@ def train(
 
     # Track gradients
     wandb.watch(model)
+    early_stopping_patience = config.patience  # Number of epochs to wait before stopping if no improvement
+    epochs_without_improvement = 0  # Keep track of the number of epochs without improvement
+
     for epoch in range(epochs):
 
         model.train()
@@ -181,8 +175,15 @@ def train(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            logger.info(f"New best val_loss achieved! \n" f"Epoch: {epoch}; Val Loss: {best_val_loss:.4f}")
+            epochs_without_improvement = 0  # Reset the counter
             save_checkpoint(model, optimizer1, optimizer2, epoch, best_val_loss, fixed_cfg, logger)
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= early_stopping_patience:
+                logger.info(
+                    f"No improvement in validation loss for {early_stopping_patience} epochs. Stopping training."
+                )
+                break
 
         wandb.log(
             {
@@ -202,31 +203,6 @@ def train(
         scheduler2.step()
 
     wandb.finish()
-
-
-def check_cuda_devices(logger):
-    """Print information about available GPUs."""
-    num_devices = torch.cuda.device_count()
-    logger.info("-" * 50)
-    if num_devices > 1:
-        logger.info(f"{num_devices} GPUs are available:")
-    elif num_devices == 1:
-        logger.info("1 GPU is available:")
-    else:
-        logger.info("WARNING! NO GPU DETECTED!")
-        logger.info("-" * 50)
-        return
-
-    for i in range(num_devices):
-        props = torch.cuda.get_device_properties(i)
-        logger.info(f"{i} | {props.name:<20} | {props.total_memory / 1024**3:2.2f} GB Memory")
-    logger.info("-" * 50)
-
-
-def read_yml(filepath: str) -> dict:
-    """Load a yml file to memory as dict."""
-    with open(filepath) as ymlfile:
-        return dict(yaml.load(ymlfile, Loader=yaml.FullLoader))
 
 
 def main() -> None:
