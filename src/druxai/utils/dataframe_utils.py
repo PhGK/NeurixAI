@@ -145,7 +145,12 @@ def k_fold_split_data_by_cell_lines_ids(
 
 
 def standardize_molecular_data_inplace(
-    data: DrugResponseDataset, train_id: List, val_id: List, test_id: List, scaler_type: str = "StandardScaler"
+    data: DrugResponseDataset,
+    train_id: List,
+    test_id: List,
+    scaler_type: str = "StandardScaler",
+    cross_val: bool = False,
+    val_id: List = None,
 ) -> None:
     """
     Standardizes molecular data in the dataset object in place based on provided train, validation, and test IDs.
@@ -153,10 +158,11 @@ def standardize_molecular_data_inplace(
     Args:
         data (DrugResponseDataset): Dataset object containing molecular data.
         train_id (Any): IDs for training set.
-        val_id (Any): IDs for validation set.
         test_id (Any): IDs for testing set.
         scaler_type (str, optional): Type of scaler to use. Options: 'StandardScaler', 'MinMaxScaler', 'RobustScaler'.
                                         Defaults to 'StandardScaler'.
+        cross_val (bool, optional): If True, skip validation set standardization. Defaults to False.
+        val_id (Any, optional): IDs for validation set. Required if cross_val is False. Defaults to None.
     """
     # Select scaler based on scaler_type
     if scaler_type == "StandardScaler":
@@ -168,31 +174,43 @@ def standardize_molecular_data_inplace(
     else:
         raise ValueError("Invalid scaler_type. Choose from 'StandardScaler', 'MinMaxScaler', or 'RobustScaler'.")
 
-    # Standartize gene data
-    scaler = StandardScaler()
+    # Standardize gene data
     train_molecular_data = data.molecular_data.loc[data.targets.iloc[train_id]["cell_line"].unique()]
     scaler.fit(train_molecular_data.values)
     standardized_train_molecular_data = scaler.transform(train_molecular_data.values)
-
-    # Apply the scaler to the validation and testing sets
-    val_molecular_data = data.molecular_data.loc[data.targets.iloc[val_id]["cell_line"].unique()]
-    standardized_val_molecular_data = scaler.transform(val_molecular_data.values)
-
-    test_molecular_data = data.molecular_data.loc[data.targets.iloc[test_id]["cell_line"].unique()]
-    standardized_test_molecular_data = scaler.transform(test_molecular_data.values)
 
     # Convert standardized arrays back to DataFrame
     standardized_train_molecular_df = pd.DataFrame(
         standardized_train_molecular_data, index=train_molecular_data.index, columns=train_molecular_data.columns
     )
-    standardized_val_molecular_df = pd.DataFrame(
-        standardized_val_molecular_data, index=val_molecular_data.index, columns=val_molecular_data.columns
-    )
+
+    # Update molecular data in the dataset object with standardized DataFrames
+    data.molecular_data.loc[data.targets.iloc[train_id]["cell_line"].unique()] = standardized_train_molecular_df
+
+    if not cross_val:
+        if val_id is None:
+            raise ValueError("val_id is required when cross_val is False.")
+
+        # Apply the scaler to the validation set
+        val_molecular_data = data.molecular_data.loc[data.targets.iloc[val_id]["cell_line"].unique()]
+        standardized_val_molecular_data = scaler.transform(val_molecular_data.values)
+
+        # Convert standardized arrays back to DataFrame
+        standardized_val_molecular_df = pd.DataFrame(
+            standardized_val_molecular_data, index=val_molecular_data.index, columns=val_molecular_data.columns
+        )
+
+        # Update molecular data in the dataset object with standardized DataFrames
+        data.molecular_data.loc[data.targets.iloc[val_id]["cell_line"].unique()] = standardized_val_molecular_df
+
+    # Apply the scaler to the testing set
+    test_molecular_data = data.molecular_data.loc[data.targets.iloc[test_id]["cell_line"].unique()]
+    standardized_test_molecular_data = scaler.transform(test_molecular_data.values)
+
+    # Convert standardized arrays back to DataFrame
     standardized_test_molecular_df = pd.DataFrame(
         standardized_test_molecular_data, index=test_molecular_data.index, columns=test_molecular_data.columns
     )
 
     # Update molecular data in the dataset object with standardized DataFrames
-    data.molecular_data.loc[data.targets.iloc[train_id]["cell_line"].unique()] = standardized_train_molecular_df
-    data.molecular_data.loc[data.targets.iloc[val_id]["cell_line"].unique()] = standardized_val_molecular_df
     data.molecular_data.loc[data.targets.iloc[test_id]["cell_line"].unique()] = standardized_test_molecular_df
