@@ -84,7 +84,7 @@ def run(config=None) -> None:
         data = DrugResponseDataset(fixed_cfg["DATA_PATH"])
         train_id, val_id, test_id = split_data_by_cell_line_ids(data.targets, seed=1337)
         train_sampler, val_sampler = DataloaderSampler(train_id), DataloaderSampler(val_id)
-        standardize_molecular_data_inplace(data, train_id, val_id, test_id)
+        standardize_molecular_data_inplace(data, train_id=train_id, test_id=test_id, val_id=val_id)
         logger.info("Finished Loading Data")
 
         train_loader, val_loader = build_dataloader(
