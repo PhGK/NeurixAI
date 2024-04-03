@@ -1,7 +1,8 @@
 """Functions which modularize the train.py file."""
 
 import os
-from typing import Dict, Tuple
+from argparse import Namespace
+from typing import Any, Dict, Tuple
 
 import torch
 import yaml
@@ -13,7 +14,7 @@ from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
     SpearmanCorrCoef,
 )
 
-from druxai.models.NN_minimal import Interaction_Model
+from druxai.models.NN_flexible import Interaction_Model
 from druxai.utils.data import DataloaderSampler, Dataset
 
 
@@ -213,9 +214,7 @@ def save_checkpoint(model, optimizer1, optimizer2, epoch, best_val_loss, fixed_c
     }
     checkpoint_path = os.path.join(fixed_cfg["RESULTS_PATH"], "ckpt.pt")
     torch.save(checkpoint, checkpoint_path)
-    logger.info(
-        f"New best val_loss achieved! \n" f"Val Loss: {best_val_loss:.4f}\n" f"Saving checkpoint to {checkpoint_path}"
-    )
+    logger.info(f"Epoch: {epoch} new best val_loss: {best_val_loss:.4f}\n" f"Saving checkpoint to {checkpoint_path}")
 
 
 def load_yaml(filename: str) -> Dict:
@@ -244,3 +243,89 @@ def get_ops_device_string():
     if torch.backends.mps.is_available():
         return "mps"
     return "cpu"
+
+
+def setup_training(
+    cfg: Namespace, data: Any, logger: Any, fixed_cfg: dict, device: torch.device
+) -> Tuple[Interaction_Model, SGD, SGD, float, int]:
+    """
+    Set up the training process based on the configuration.
+
+    Args:
+        cfg (Namespace): The configuration namespace.
+        data (Any): The data to be used for training.
+        logger (Any): The logger to be used for logging information.
+        fixed_cfg (dict): The fixed configuration dictionary.
+        device (torch.device): Device on which to perform the evaluation.
+
+    Returns
+    -------
+        Tuple[Interaction_Model, SGD, SGD, float, int]: Returns the model, two optimizers, the best validation loss,
+                                                        and the iteration number.
+    """
+    if not cfg.resume:
+        logger.info("Training model from scratch.")
+        model = Interaction_Model(
+            data,
+            cfg.output_features,
+            cfg.hidden_dims_nn1,
+            cfg.hidden_dims_nn2,
+            cfg.dropout_nn1,
+            cfg.dropout_nn2,
+        )
+        model.train().to(device)
+        optimizer1, optimizer2 = set_optimizers(model, cfg.optimizer, cfg.learning_rate)
+        scheduler1, scheduler2 = set_schedulers(cfg.scheduler, optimizer1, optimizer2)
+        loss_func = set_loss(cfg.loss)
+        best_val_loss = 1e9
+    else:
+        logger.info(f"Resuming training from {fixed_cfg['RESULTS_PATH']}/ckpt.pt")
+        # Load checkpoint
+        ckpt_path = os.path.join(fixed_cfg["RESULTS_PATH"], "ckpt.pt")
+        checkpoint = torch.load(ckpt_path)
+        # Initialize model with the same configuration as the checkpoint
+        model = Interaction_Model(
+            data,
+            cfg.output_features,
+            cfg.hidden_dims_nn1,
+            cfg.hidden_dims_nn2,
+            cfg.dropout_nn1,
+            cfg.dropout_nn2,
+        )
+        model.load_state_dict(checkpoint["model"])
+        model.train().to(device)
+        optimizer1, optimizer2 = set_optimizers(model, cfg.optimizer, cfg.learning_rate)
+        scheduler1, scheduler2 = set_schedulers(cfg.scheduler, optimizer1, optimizer2)
+        loss_func = set_loss(cfg.loss)
+        # Also load optimizer states if needed
+        optimizer1.load_state_dict(checkpoint["optimizer1"])
+        optimizer2.load_state_dict(checkpoint["optimizer2"])
+        # Update best validation loss
+        best_val_loss = checkpoint["best_val_loss"]
+
+    return model, optimizer1, optimizer2, scheduler1, scheduler2, loss_func, best_val_loss
+
+
+def check_cuda_devices(logger):
+    """Print information about available GPUs."""
+    num_devices = torch.cuda.device_count()
+    logger.info("-" * 50)
+    if num_devices > 1:
+        logger.info(f"{num_devices} GPUs are available:")
+    elif num_devices == 1:
+        logger.info("1 GPU is available:")
+    else:
+        logger.info("WARNING! NO GPU DETECTED!")
+        logger.info("-" * 50)
+        return
+
+    for i in range(num_devices):
+        props = torch.cuda.get_device_properties(i)
+        logger.info(f"{i} | {props.name:<20} | {props.total_memory / 1024**3:2.2f} GB Memory")
+    logger.info("-" * 50)
+
+
+def read_yml(filepath: str) -> dict:
+    """Load a yml file to memory as dict."""
+    with open(filepath) as ymlfile:
+        return dict(yaml.load(ymlfile, Loader=yaml.FullLoader))
