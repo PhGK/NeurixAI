@@ -4,7 +4,7 @@ PROJECT_PATH: "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI"
 DATA_PATH: "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/data/preprocessed"
 
 # wandb logging
-SWEEPNAME: "DruxAI Hyperparameter Sweep"
+EXPERIMENT_NAME: "DruxAI Trainin Run"
 
 # fixed params
 GRAD_CLIP: 1.0
