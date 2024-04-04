@@ -1,10 +1,9 @@
 # path definitions
 RESULTS_PATH: "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/results/training"
-PROJECT_PATH: "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI"
 DATA_PATH: "/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/data/preprocessed"
 
 # wandb logging
-EXPERIMENT_NAME: "DruxAI Trainin Run"
+EXPERIMENT_NAME: "DruxAI Training Run"
 
 # fixed params
 GRAD_CLIP: 1.0
