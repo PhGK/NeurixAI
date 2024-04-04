@@ -184,7 +184,7 @@ def train(
         avg_train_loss = metric_train_loss.compute()
         train_rscore = metric_train_rscore.compute()
 
-        val_loss, val_rscore = evaluate(model, val_loader, loss_func, device, fixed_cfg)
+        val_loss, val_rscore = evaluate(model, val_loader, loss_func, device)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
