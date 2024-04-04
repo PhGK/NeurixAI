@@ -3,7 +3,7 @@
 import logging
 import os
 from argparse import Namespace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import yaml
@@ -157,7 +157,7 @@ def evaluate(
     val_loader: DataLoader,
     loss_func: torch.nn.Module,
     device: torch.device,
-    fixed_cfg: Dict[str, Any],
+    fixed_cfg: Optional[Dict[str, Any]] = None,
     prediction_file: str = None,
 ) -> tuple[float, float]:
     """
@@ -168,6 +168,8 @@ def evaluate(
         val_loader (DataLoader): DataLoader for the validation data.
         loss_func (torch.nn.Module): Loss function to evaluate the performance.
         device (torch.device): Device on which to perform the evaluation.
+        fixed_cfg (Optional[Dict[str, Any]], optional): Configuration parameters used for accessing result path.
+                                                        Defaults to None.
         prediction_file (str, optional): The file to save the predictions to. Defaults to None.
 
     Returns
@@ -207,6 +209,7 @@ def evaluate(
         )
 
         if prediction_file is not None:
+            assert fixed_cfg is not None, "Fixed configuration parameters are required to save the predictions."
             save_dir = os.path.join(fixed_cfg["RESULTS_PATH"], "predictions")
             os.makedirs(save_dir, exist_ok=True)
             save_path = os.path.join(save_dir, prediction_file)
