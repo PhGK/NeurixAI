@@ -1,7 +1,8 @@
 """Training script. To run it do: $ python train.py."""
 
+import os
 from types import SimpleNamespace
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -41,20 +42,20 @@ fixed_cfg = load_yaml("/Users/niklaskiermeyer/Desktop/Codespace/DruxAI/fixed_con
 # SET THESE CONFIG PARAMETERS
 config = {
     "name": "cross_val",
-    "project": "Cross Validation Training DruxAI",
+    "project": "druxai",
     "metric": {"name": "r2_val", "goal": "maximize"},
     "nsplits": 5,
     "resume": False,
     "patience": 5,
-    "epochs": 1,
+    "epochs": 2,
     "optimizer": "sgd",
     "scheduler": "exponential",
     "loss": "huber",
     "batch_size": 128,
     "learning_rate": 0.1,
     "output_features": 256,
-    "hidden_dims_nn1": [512],
-    "hidden_dims_nn2": [100],
+    "hidden_dims_nn1": [10],
+    "hidden_dims_nn2": [10],
     "dropout_nn1": 0.1,
     "dropout_nn2": 0.1,
 }
@@ -76,6 +77,10 @@ def run(config=None) -> None:
     """Kick off training."""
     # Load data
     data = DrugResponseDataset(fixed_cfg["DATA_PATH"])
+
+    # Create Results path if not existent
+    if not os.path.exists(fixed_cfg["RESULTS_PATH"]):
+        os.makedirs(fixed_cfg["RESULTS_PATH"])
 
     train_ids, test_ids = k_fold_split_data_by_cell_lines_ids(data.targets, n_splits=config.nsplits)
 
@@ -110,6 +115,7 @@ def run(config=None) -> None:
                 device=device,
                 best_val_loss=best_val_loss,
                 epochs=config.epochs,
+                fold=i + 1,
             )
 
 
@@ -124,6 +130,7 @@ def train(
     device,
     epochs,
     best_val_loss: int = 1e9,
+    fold: Optional[int] = None,
 ):
     """Train DruxAI Network end-to-end.
 
@@ -138,6 +145,7 @@ def train(
         device (str or torch.device, optional): The device to run the computations on ('cpu' or 'cuda').
         epochs (int): Number of epochs to train the model for.
         best_val_loss (int, optional): The best validation loss obtained during training. Defaults to 1e9.
+        fold (int, optional): The fold number for the current training run if CV is used. Defaults to None.
     """
     optimizer1, optimizer2 = optimizers[0], optimizers[1]
     scheduler1, scheduler2 = schedulers[0], schedulers[1]
@@ -175,7 +183,8 @@ def train(
 
         avg_train_loss = metric_train_loss.compute()
         train_rscore = metric_train_rscore.compute()
-        val_loss, val_rscore = evaluate(model, val_loader, loss_func, device)
+
+        val_loss, val_rscore = evaluate(model, val_loader, loss_func, device, fixed_cfg)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -206,6 +215,8 @@ def train(
         scheduler1.step()
         scheduler2.step()
 
+    prediction_file = f"prediction_fold_{fold}_epoch_{epoch}.csv"
+    val_loss, val_rscore = evaluate(model, val_loader, loss_func, device, fixed_cfg, prediction_file)
     wandb.finish()
 
 

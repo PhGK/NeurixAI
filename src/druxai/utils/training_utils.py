@@ -3,7 +3,7 @@
 import logging
 import os
 from argparse import Namespace
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 import torch
 import yaml
@@ -15,6 +15,9 @@ from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
     MeanMetric,
     SpearmanCorrCoef,
 )
+
+import numpy as np
+import pandas as pd
 
 from druxai.models.NN_flexible import Interaction_Model
 from druxai.utils.data import DataloaderSampler, Dataset
@@ -150,7 +153,12 @@ def build_network():
 
 
 def evaluate(
-    model: torch.nn.Module, val_loader: DataLoader, loss_func: torch.nn.Module, device: torch.device
+    model: torch.nn.Module,
+    val_loader: DataLoader,
+    loss_func: torch.nn.Module,
+    device: torch.device,
+    fixed_cfg: Dict[str, Any],
+    prediction_file: str = None,
 ) -> tuple[float, float]:
     """
     Evaluate the given model on the validation data.
@@ -160,6 +168,7 @@ def evaluate(
         val_loader (DataLoader): DataLoader for the validation data.
         loss_func (torch.nn.Module): Loss function to evaluate the performance.
         device (torch.device): Device on which to perform the evaluation.
+        prediction_file (str, optional): The file to save the predictions to. Defaults to None.
 
     Returns
     -------
@@ -170,7 +179,8 @@ def evaluate(
     metric_val_rscore = SpearmanCorrCoef().to(device)
 
     with torch.no_grad():
-        for X, y, _ in val_loader:
+        out, pred, ids = [], [], []
+        for X, y, idx in val_loader:
             drug, molecular, outcome = (
                 X["drug_encoding"].to(device),
                 X["gene_expression"].to(device),
@@ -181,6 +191,26 @@ def evaluate(
             val_loss = loss_func(prediction, outcome)
             metric_val_loss(val_loss)
             metric_val_rscore(prediction, outcome)
+
+            # Write the results to the lists
+            out.extend(outcome.tolist())
+            pred.extend(prediction.tolist())
+            ids.extend(idx.tolist())
+
+        df = pd.DataFrame(
+            {
+                "ground_truth": out,
+                "prediction": pred,
+                "cells": np.array(val_loader.dataset.targets.iloc[ids]["cell_line"]),
+                "drugs": np.array(val_loader.dataset.targets.iloc[ids]["DRUG"]),
+            }
+        )
+
+        if prediction_file is not None:
+            save_dir = os.path.join(fixed_cfg["RESULTS_PATH"], "predictions")
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, prediction_file)
+            df.to_csv(save_path, index=False)
 
     val_loss = float(metric_val_loss.compute())
     val_rscore = float(metric_val_rscore.compute())
@@ -346,3 +376,23 @@ def read_yml(filepath: str) -> dict:
     """Load a yml file to memory as dict."""
     with open(filepath) as ymlfile:
         return dict(yaml.load(ymlfile, Loader=yaml.FullLoader))
+
+
+def save_results_to_disk(results: List[float], filename: str) -> None:
+    """
+    Save the results to a CSV file.
+
+    Parameters
+    ----------
+    results (List[float]): A list of predictions.
+    filename (str): The name of the file to save the results to.
+
+    Returns
+    -------
+    None
+    """
+    # Convert the results to a DataFrame
+    df = pd.DataFrame(results, columns=["Prediction"])
+
+    # Save the DataFrame to a CSV file
+    df.to_csv(filename, index=False)
