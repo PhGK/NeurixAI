@@ -1,12 +1,9 @@
 """Module contains functions for creating DataFrame from computed variables."""
 
-from typing import Any, List, Tuple
-
-from torch import Tensor
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
-from pandas import DataFrame
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 
@@ -14,33 +11,6 @@ from druxai.utils.data import DrugResponseDataset
 from druxai.utils.set_seeds import set_seeds
 
 set_seeds()
-
-
-def create_batch_result(outcome: Tensor, prediction: Tensor, ds: Any, idx: Any, epoch: int) -> DataFrame:
-    """
-    Create a DataFrame containing batch results.
-
-    Args:
-        outcome (torch.Tensor): Ground truth outcomes.
-        prediction (torch.Tensor): Predicted outcomes.
-        ds (Any): dataset
-        idx (Any): Description of idx parameter.
-        fold (int): Fold number.
-        epoch (int): Epoch number.
-
-    Returns
-    -------
-        pd.DataFrame: DataFrame containing batch results.
-    """
-    return pd.DataFrame(
-        {
-            "ground_truth": outcome.squeeze().cpu().numpy(),
-            "prediction": prediction.squeeze().cpu().numpy(),
-            "cells": np.array(ds.targets.iloc[idx]["cell_line"]),
-            "drugs": np.array(ds.targets.iloc[idx]["DRUG"]),
-            "epoch": epoch,
-        }
-    )
 
 
 def split_data_by_cell_line_ids(
