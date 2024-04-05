@@ -159,7 +159,7 @@ def train(
             metric_train_rscore(prediction, outcome)
 
             train_loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), fixed_cfg["GRAD_CLIP"])
+            torch.nn.utils.clip_grad_norm_(model.parameters(), fixed_cfg["GRAD_CLIP"])
             optimizer.step()
 
         avg_train_loss = metric_train_loss.compute()
