@@ -81,9 +81,9 @@ def set_optimizers(model: FusionModel, optimizer: str, learning_rate: float, wei
     """
     # Initializing optimizers based on the selected optimizer
     if optimizer == "sgd":
-        optimizer = SGD(model.nn1.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
+        optimizer = SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
     elif optimizer == "adam":
-        optimizer = Adam(model.nn1.parameters(), lr=learning_rate)
+        optimizer = Adam(model.parameters(), lr=learning_rate)
     else:
         raise ValueError(f"Unknown optimizer: {optimizer}. Please choose 'sgd' or 'adam'.")
 

@@ -24,7 +24,6 @@ class FusionModel(nn.Module):
         dataset,
         hidden_size: int,
         output_size: int,
-        final_output_size: int,
         dropout_rate_drug_model: float = 0,
         dropout_rate_gene_expression_model: float = 0,
     ):
@@ -35,7 +34,6 @@ class FusionModel(nn.Module):
             dataset: The dataset object containing the drug and gene expression data.
             hidden_size (int): The size of the hidden layers in the models.
             output_size (int): The size of the output from the models before fusion.
-            final_output_size (int): The size of the final output after fusion.
             dropout_rate_drug_model (float, optional): The dropout rate for the drug model layers. Defaults to 0.
             dropout_rate_gene_expression_model (float, optional): The dropout rate for the gene expression model layers.
                                                                   Defaults to 0.
@@ -43,7 +41,6 @@ class FusionModel(nn.Module):
         super().__init__()
         self.ndrug_features = dataset.ndrug_features
         self.nmolecular_features = dataset.nmolecular_features
-
         self.drug_model = nn.Sequential(
             nn.Linear(self.ndrug_features, hidden_size),
             nn.ReLU(),
@@ -56,7 +53,7 @@ class FusionModel(nn.Module):
             nn.Dropout(dropout_rate_gene_expression_model),
             nn.Linear(hidden_size, output_size),
         )
-        self.fusion_layer = nn.Linear(output_size * 2, final_output_size)
+        self.fusion_layer = nn.Linear(output_size * 2, 1)
 
     def forward(self, drug_data: torch.Tensor, gene_expression_data: torch.Tensor) -> torch.Tensor:
         """
