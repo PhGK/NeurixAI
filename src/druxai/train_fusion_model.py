@@ -185,7 +185,7 @@ def train(
                 "val_loss": val_loss,
                 "r2_train": train_rscore,
                 "r2_val": val_rscore,
-                "lr_opt1": optimizer.param_groups[0]["lr"],
+                "lr_opt": optimizer.param_groups[0]["lr"],
             }
         )
 
