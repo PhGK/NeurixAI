@@ -83,11 +83,13 @@ def set_optimizers(
     """
     # Initializing optimizers based on the selected optimizer
     if optimizer == "sgd":
-        optimizer1 = SGD(model.nn1.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
-        optimizer2 = SGD(model.nn2.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
+        optimizer1 = SGD(model.drug_nn.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
+        optimizer2 = SGD(
+            model.gene_expression_nn.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay
+        )
     elif optimizer == "adam":
-        optimizer1 = Adam(model.nn1.parameters(), lr=learning_rate)
-        optimizer2 = Adam(model.nn2.parameters(), lr=learning_rate)
+        optimizer1 = Adam(model.drug_nn.parameters(), lr=learning_rate)
+        optimizer2 = Adam(model.gene_expression_nn.parameters(), lr=learning_rate)
     else:
         raise ValueError(f"Unknown optimizer: {optimizer}. Please choose 'sgd' or 'adam'.")
 
@@ -318,10 +320,10 @@ def setup_training(
         model = Interaction_Model(
             data,
             cfg.output_features,
-            cfg.hidden_dims_nn1,
-            cfg.hidden_dims_nn2,
-            cfg.dropout_nn1,
-            cfg.dropout_nn2,
+            cfg.hidden_dims_drug_nn,
+            cfg.hidden_dims_gene_expression_nn,
+            cfg.dropout_drug_nn,
+            cfg.dropout_gene_expression_nn,
         )
         model.train().to(device)
         optimizer1, optimizer2 = set_optimizers(model, cfg.optimizer, cfg.learning_rate)
@@ -337,10 +339,10 @@ def setup_training(
         model = Interaction_Model(
             data,
             cfg.output_features,
-            cfg.hidden_dims_nn1,
-            cfg.hidden_dims_nn2,
-            cfg.dropout_nn1,
-            cfg.dropout_nn2,
+            cfg.hidden_dims_drug_nn,
+            cfg.hidden_dims_gene_expression_nn,
+            cfg.dropout_drug_nn,
+            cfg.dropout_gene_expression_nn,
         )
         model.load_state_dict(checkpoint["model"])
         model.train().to(device)

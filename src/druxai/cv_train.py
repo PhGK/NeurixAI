@@ -56,8 +56,8 @@ config = {
     "output_features": 256,
     "hidden_dims_drug_nn": [10],
     "hidden_dims_gene_expression_nn": [10],
-    "droupout_drug_nn": 0.1,
-    "droupout_gene_expression_nn": 0.1,
+    "dropout_drug_nn": 0.1,
+    "dropout_gene_expression_nn": 0.1,
 }
 
 # Create logger
