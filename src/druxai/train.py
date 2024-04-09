@@ -51,10 +51,10 @@ config = {
     "batch_size": 128,
     "learning_rate": 0.1,
     "output_features": 256,
-    "hidden_dims_nn1": [512],
-    "hidden_dims_nn2": [512],
-    "dropout_nn1": 0.1,
-    "dropout_nn2": 0.1,
+    "hidden_dims_drug_nn": [512],
+    "hidden_dims_gene_expression_nn": [512],
+    "droupout_drug_nn": 0.1,
+    "droupout_gene_expression_nn": 0.1,
 }
 
 # Create logger

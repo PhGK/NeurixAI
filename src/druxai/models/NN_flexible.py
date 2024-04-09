@@ -30,18 +30,11 @@ class Model(nn.Module):
         prev_dim = input_dim
         for dim in hidden_dims:
             layers.append(nn.Linear(prev_dim, dim))
-            layers.append(nn.LeakyReLU())
+            layers.append(nn.ReLU())
             layers.append(nn.Dropout(p=dropout))
             prev_dim = dim
         layers.append(nn.Linear(prev_dim, output_dim))
         self.model = nn.Sequential(*layers)
-        self.init_weights()
-
-    def init_weights(self):
-        """Initialize weights using Kaiming Uniform initialization."""
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.kaiming_uniform_(m.weight, nonlinearity="leaky_relu")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
@@ -63,10 +56,10 @@ class Interaction_Model(nn.Module):
         self,
         ds,
         nfeatures_product: int,
-        hidden_dims_nn1: List[int],
-        hidden_dims_nn2: List[int],
-        dropout_nn1: float,
-        dropout_nn2: float,
+        hidden_dims_drug_nn: List[int],
+        hidden_dims_gene_expression_nn: List[int],
+        droupout_drug_nn: float,
+        droupout_gene_expression_nn: float,
     ):
         """
         Initialize the Interaction_Model.
@@ -74,10 +67,11 @@ class Interaction_Model(nn.Module):
         Args:
             ds: Dataset object containing information about features.
             nfeatures_product (int): Dimensionality of the product features (Final output.)
-            hidden_dims_nn1 (List[int]): List of integers representing the dimensions of hidden layers for nn1.
-            hidden_dims_nn2 (List[int]): List of integers representing the dimensions of hidden layers for nn2.
-            dropout_nn1 (float): Dropout probability for nn1.
-            dropout_nn2 (float): Dropout probability for nn2.
+            hidden_dims_drug_nn (List[int]): List of integers representing the dimensions of hidden layers for drug NN.
+            hidden_dims_gene_expression_nn (List[int]): List of integers representing the dimensions of hidden layers
+                                                        for Gene NN.
+            droupout_drug_nn (float): Dropout probability for drug NN.
+            droupout_gene_expression_nn (float): Dropout probability for gene expression NN.
         """
         super().__init__()
 
@@ -93,25 +87,35 @@ class Interaction_Model(nn.Module):
         assert isinstance(nfeatures_product, int), "The number of product features must be an integer"
         assert nfeatures_product > 0, "The number of product features must be greater than zero"
 
-        assert all(isinstance(dim, int) and dim > 0 for dim in hidden_dims_nn1), "Invalid hidden dimensions for nn1"
-        assert all(isinstance(dim, int) and dim > 0 for dim in hidden_dims_nn2), "Invalid hidden dimensions for nn2"
-        assert 0.0 <= dropout_nn1 < 1.0, "Dropout probability for nn1 must be in range [0, 1)"
-        assert 0.0 <= dropout_nn2 < 1.0, "Dropout probability for nn2 must be in range [0, 1)"
+        assert all(
+            isinstance(dim, int) and dim > 0 for dim in hidden_dims_drug_nn
+        ), "Invalid hidden dimensions for Drug NN"
+        assert all(
+            isinstance(dim, int) and dim > 0 for dim in hidden_dims_gene_expression_nn
+        ), "Invalid hidden dimensions for Gene NN"
+        assert 0.0 <= droupout_drug_nn < 1.0, "Dropout probability for Drug NN must be in range [0, 1)"
+        assert 0.0 <= droupout_gene_expression_nn < 1.0, "Dropout probability for Gene NN must be in range [0, 1)"
 
-        self.input_features_nn1 = ds.ndrug_features
-        self.input_features_nn2 = ds.nmolecular_features
+        self.input_features_drug_nn = ds.ndrug_features
+        self.input_features_gene_expression_nn = ds.nmolecular_features
         self.nfeatures_product = nfeatures_product
-        self.hidden_dims_nn1 = hidden_dims_nn1
-        self.hidden_dims_nn2 = hidden_dims_nn2
-        self.dropout_nn1 = dropout_nn1
-        self.dropout_nn2 = dropout_nn2
+        self.hidden_dims_drug_nn = hidden_dims_drug_nn
+        self.hidden_dims_gene_expression_nn = hidden_dims_gene_expression_nn
+        self.droupout_drug_nn = droupout_drug_nn
+        self.droupout_gene_expression_nn = droupout_gene_expression_nn
 
         # Define neural networks
-        self.nn1 = Model(
-            self.input_features_nn1, self.nfeatures_product, hidden_dims=self.hidden_dims_nn1, dropout=self.dropout_nn1
+        self.drug_nn = Model(
+            self.input_features_drug_nn,
+            self.nfeatures_product,
+            hidden_dims=self.hidden_dims_drug_nn,
+            dropout=self.droupout_drug_nn,
         )
-        self.nn2 = Model(
-            self.input_features_nn2, self.nfeatures_product, hidden_dims=self.hidden_dims_nn2, dropout=self.dropout_nn2
+        self.gene_expression_nn = Model(
+            self.input_features_gene_expression_nn,
+            self.nfeatures_product,
+            hidden_dims=self.hidden_dims_gene_expression_nn,
+            dropout=self.droupout_gene_expression_nn,
         )
 
     def forward(self, drug: torch.Tensor, molecular: torch.Tensor) -> torch.Tensor:
@@ -126,7 +130,7 @@ class Interaction_Model(nn.Module):
         -------
             torch.Tensor: Tensor representing the interaction of drug and molecular features.
         """
-        intermediate1 = self.nn1(drug)
-        intermediate2 = self.nn2(molecular)
+        intermediate1 = self.drug_nn(drug)
+        intermediate2 = self.gene_expression_nn(molecular)
         product = intermediate1 * intermediate2
         return product.mean(axis=1).unsqueeze(1)
