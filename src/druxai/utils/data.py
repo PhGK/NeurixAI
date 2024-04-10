@@ -16,7 +16,7 @@ set_seeds()
 
 
 class DrugResponseDataset(Dataset):
-    """Drug Response Dataset class which handels molecular and drug data."""
+    """Drug Response Dataset class which handles molecular and drug data."""
 
     def __init__(self, file_path):
         self.file_path = file_path
