@@ -58,8 +58,8 @@ class Interaction_Model(nn.Module):
         nfeatures_product: int,
         hidden_dims_drug_nn: List[int],
         hidden_dims_gene_expression_nn: List[int],
-        droupout_drug_nn: float,
-        droupout_gene_expression_nn: float,
+        dropout_drug_nn: float,
+        dropout_gene_expression_nn: float,
     ):
         """
         Initialize the Interaction_Model.
@@ -93,16 +93,16 @@ class Interaction_Model(nn.Module):
         assert all(
             isinstance(dim, int) and dim > 0 for dim in hidden_dims_gene_expression_nn
         ), "Invalid hidden dimensions for Gene NN"
-        assert 0.0 <= droupout_drug_nn < 1.0, "Dropout probability for Drug NN must be in range [0, 1)"
-        assert 0.0 <= droupout_gene_expression_nn < 1.0, "Dropout probability for Gene NN must be in range [0, 1)"
+        assert 0.0 <= dropout_drug_nn < 1.0, "Dropout probability for Drug NN must be in range [0, 1)"
+        assert 0.0 <= dropout_gene_expression_nn < 1.0, "Dropout probability for Gene NN must be in range [0, 1)"
 
         self.input_features_drug_nn = ds.ndrug_features
         self.input_features_gene_expression_nn = ds.nmolecular_features
         self.nfeatures_product = nfeatures_product
         self.hidden_dims_drug_nn = hidden_dims_drug_nn
         self.hidden_dims_gene_expression_nn = hidden_dims_gene_expression_nn
-        self.droupout_drug_nn = droupout_drug_nn
-        self.droupout_gene_expression_nn = droupout_gene_expression_nn
+        self.droupout_drug_nn = dropout_drug_nn
+        self.droupout_gene_expression_nn = dropout_gene_expression_nn
 
         # Define neural networks
         self.drug_nn = Model(
