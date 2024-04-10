@@ -45,7 +45,7 @@ class DrugResponseDataset(Dataset):
         gene_expression_values = torch.tensor(
             self.molecular_data.loc[self.targets.iloc[idx]["cell_line"]].values, dtype=torch.float32
         )
-        target = torch.tensor([self.targets.iloc[idx]["logauc"]], dtype=torch.float32)
+        target = torch.tensor([self.targets.iloc[idx]["auc_per_drug"]], dtype=torch.float32)
         drug_one_hot = self.drug_encoding_dict[self.targets.iloc[idx]["DRUG"]]
         return {"gene_expression": gene_expression_values, "drug_encoding": drug_one_hot}, target, idx
 
