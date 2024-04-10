@@ -44,15 +44,15 @@ config = {
     "metric": {"name": "r2_val", "goal": "maximize"},
     "resume": False,
     "patience": 5,
-    "epochs": 20,
+    "epochs": 1,
     "optimizer": "sgd",
     "scheduler": "exponential",
     "loss": "huber",
     "batch_size": 128,
     "learning_rate": 0.1,
-    "output_features": 256,
-    "hidden_dims_drug_nn": [512],
-    "hidden_dims_gene_expression_nn": [512],
+    "output_features": 5,
+    "hidden_dims_drug_nn": [5],
+    "hidden_dims_gene_expression_nn": [5],
     "dropout_drug_nn": 0.1,
     "dropout_gene_expression_nn": 0.1,
 }
@@ -171,7 +171,7 @@ def train(
 
         avg_train_loss = metric_train_loss.compute()
         train_rscore = metric_train_rscore.compute()
-        val_loss, val_rscore = evaluate(model, val_loader, loss_func, device)
+        val_loss, val_rscore = evaluate(model, val_loader, loss_func, device, fixed_cfg, "test_pred.csv")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
