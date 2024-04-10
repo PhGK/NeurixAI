@@ -16,7 +16,6 @@ from torchmetrics import (  # https://lightning.ai/docs/torchmetrics
     SpearmanCorrCoef,
 )
 
-import numpy as np
 import pandas as pd
 
 from druxai.models.NN_flexible import Interaction_Model
@@ -197,16 +196,16 @@ def evaluate(
             metric_val_rscore(prediction, outcome)
 
             # Write the results to the lists
-            out.extend(outcome.tolist())
-            pred.extend(prediction.tolist())
+            out.extend(outcome.squeeze(1).cpu().tolist())
+            pred.extend(prediction.squeeze(1).cpu().tolist())
             ids.extend(idx.tolist())
 
         df = pd.DataFrame(
             {
                 "ground_truth": out,
                 "prediction": pred,
-                "cells": np.array(val_loader.dataset.targets.iloc[ids]["cell_line"]),
-                "drugs": np.array(val_loader.dataset.targets.iloc[ids]["DRUG"]),
+                "cells": val_loader.dataset.targets.iloc[ids]["cell_line"],
+                "drugs": val_loader.dataset.targets.iloc[ids]["DRUG"],
             }
         )
 
