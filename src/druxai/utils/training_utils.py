@@ -141,7 +141,7 @@ def set_loss(loss_type: str, *args, **kwargs) -> Tuple:
         loss_func = torch.nn.MSELoss(*args, **kwargs)
     elif loss_type == "huber":
         # Huber loss
-        loss_func = torch.nn.SmoothL1Loss(*args, **kwargs)
+        loss_func = torch.nn.HuberLoss(*args, **kwargs)
     else:
         raise ValueError(f"Unknown loss function type: {loss_type}.")
 
