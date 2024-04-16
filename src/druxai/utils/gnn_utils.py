@@ -1,9 +1,10 @@
 """Utility functions for feature extraction of Drugs for GNNs."""
 
-# Code taken from:
+# Code taken and adapted from:
 # https://www.blopig.com/blog/2022/02/how-to-turn-a-smiles-string-into-a-molecular-graph-for-pytorch-geometric/
 
-from typing import List
+import pickle
+from typing import Dict, List
 
 # Pytorch and Pytorch Geometri
 import torch
@@ -28,6 +29,11 @@ def one_hot_encoding(x, permitted_list: List[str]) -> List[int]:
     Returns
     -------
         List[int]: One-hot encoded representation of the input element.
+
+    Example:
+        >>> x = 'A'
+        >>> permitted_list = ['A', 'B', 'C']
+        >>> encoding = one_hot_encoding(x, permitted_list)
     """
     if x not in permitted_list:
         x = permitted_list[-1]
@@ -46,6 +52,10 @@ def get_atom_features(atom: Chem.Atom, use_chirality: bool = True, hydrogens_imp
     Returns
     -------
         np.ndarray: 1D numpy array of atom features.
+
+    Example:
+        >>> atom = Chem.Atom("C")
+        >>> features = get_atom_features(atom)
     """
     # define list of permitted atoms
     permitted_list_of_atoms = [
@@ -146,6 +156,10 @@ def get_bond_features(bond: Chem.Bond, use_stereochemistry: bool = True) -> np.n
     Returns
     -------
         np.ndarray: 1D numpy array of bond features.
+
+    Example:
+        >>> bond = Chem.rdchem.BondType.SINGLE
+        >>> features = get_bond_features(bond)
     """
     permitted_list_of_bond_types = [
         Chem.rdchem.BondType.SINGLE,
@@ -169,22 +183,27 @@ def get_bond_features(bond: Chem.Bond, use_stereochemistry: bool = True) -> np.n
     return np.array(bond_feature_vector)
 
 
-def create_pytorch_geometric_graph_data_list_from_smiles_and_labels(x_smiles: List[str], y: List[float]) -> List[Data]:
+def create_pytorch_geometric_graph_data_list_from_smiles(x_smiles: List[str], drug_names: List[str]) -> Dict[str, Data]:
     """
-    Convert a list of SMILES strings and associated labels into a list of PyTorch Geometric Data objects.
+    Convert a list of SMILES strings into a dictionary of PyTorch Geometric Data objects, with drug names as keys.
 
     Args:
         x_smiles (List[str]): A list of SMILES strings representing molecular structures.
-        y (List[float]): A list of numerical labels associated with the SMILES strings.
+        drug_names (List[str]): A list of drug names associated with the SMILES strings.
 
     Returns
     -------
-        List[Data]: A list of PyTorch Geometric Data objects representing labeled molecular graphs.
+        Dict[str, Data]: A dictionary mapping drug names to PyTorch Geometric Data objects representing labeled
+                        molecular graphs.
 
+    Example:
+        >>> smiles_list = ['CCO', 'CCN']
+        >>> drug_names = ['DrugA', 'DrugB']
+        >>> data_dict = create_pytorch_geometric_graph_data_list_from_smiles(smiles_list, drug_names)
     """
-    data_list = []
+    data_dict = {}
 
-    for smiles, y_val in zip(x_smiles, y):
+    for smiles, drug_name in zip(x_smiles, drug_names):
 
         # convert SMILES to RDKit mol object
         mol = Chem.MolFromSmiles(smiles)
@@ -215,15 +234,45 @@ def create_pytorch_geometric_graph_data_list_from_smiles_and_labels(x_smiles: Li
         EF = np.zeros((n_edges, n_edge_features))
 
         for k, (i, j) in enumerate(zip(rows, cols)):
-
             EF[k] = get_bond_features(mol.GetBondBetweenAtoms(int(i), int(j)))
 
         EF = torch.tensor(EF, dtype=torch.float)
 
-        # construct label tensor
-        y_tensor = torch.tensor(np.array([y_val]), dtype=torch.float)
+        # construct Pytorch Geometric data object and add to data dictionary
+        data_dict[drug_name] = Data(x=X, edge_index=E, edge_attr=EF)
 
-        # construct Pytorch Geometric data object and append to data list
-        data_list.append(Data(x=X, edge_index=E, edge_attr=EF, y=y_tensor))
+    return data_dict
 
-    return data_list
+
+def save_dictionary(dictionary: Dict, file_path: str) -> None:
+    """
+    Save a dictionary to a file using pickle serialization.
+
+    Args:
+        dictionary (Dict): The dictionary to be saved.
+        file_path (str): The full path including the directory where the file will be saved.
+
+    Example:
+        >>> data_dict = {'DrugA': data_object_1, 'DrugB': data_object_2}
+        >>> save_dictionary(data_dict, 'data_dict.pkl', '/path/to/save/data_dict.pkl')
+    """
+    with open(file_path, "wb") as f:
+        pickle.dump(dictionary, f)
+
+
+def load_dictionary(file_path: str) -> Dict:
+    """
+    Load a dictionary from a file using pickle deserialization.
+
+    Args:
+        file_path (str): The name of the file to load the dictionary from.
+
+    Returns
+    -------
+        Dict: The dictionary loaded from the file.
+
+    Example:
+        >>> loaded_data_dict = load_dictionary('data_dict.pkl')
+    """
+    with open(file_path, "rb") as f:
+        return pickle.load(f)
