@@ -12,7 +12,7 @@ import torch
 # RDkit
 from rdkit import Chem
 from rdkit.Chem.rdmolops import GetAdjacencyMatrix
-from torch_geometric.data import Data
+from torch_geometric.data import Batch, Data
 
 # general tools
 import numpy as np
@@ -276,3 +276,34 @@ def load_dictionary(file_path: str) -> Dict:
     """
     with open(file_path, "rb") as f:
         return pickle.load(f)
+
+
+def custom_collate(batch: List[Data]) -> Dict:
+    """
+    Prepare a batch of data with a custom collate function.
+
+    This function takes a list of samples, where each sample is a PyTorch Geometric Data object.
+    It collates these into a dictionary of tensors and batches, ready for input into a model.
+
+    Args:
+        batch (List[Data]): A list of samples. Each sample is a PyTorch Geometric Data object.
+
+    Returns
+    -------
+        Dict: A dictionary containing the collated data. The keys are
+            'gene_expression_values', 'smile_graph', 'target', and 'idx', and the
+            values are tensors or batches containing the collated data for each key.
+    """
+    gene_expression_values_batch = torch.stack([sample[0] for sample in batch])
+
+    # Add more attributes as needed
+    drug_x_batch = Batch.from_data_list([sample[1] for sample in batch])
+    target_batch = torch.stack([sample[2] for sample in batch])
+    idx_batch = torch.tensor([sample[3] for sample in batch])  # Convert idx to tensor
+
+    return {
+        "gene_expression_values": gene_expression_values_batch,
+        "smile_graph": drug_x_batch,
+        "target": target_batch,
+        "idx": idx_batch,
+    }
