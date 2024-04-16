@@ -5,6 +5,7 @@ from typing import List
 import torch
 import torch.nn as nn
 
+from druxai.models.gnn import Drug_GAT
 from druxai.utils.set_seeds import set_seeds
 
 set_seeds()
@@ -131,6 +132,64 @@ class Interaction_Model(nn.Module):
             torch.Tensor: Tensor representing the interaction of drug and molecular features.
         """
         intermediate1 = self.drug_nn(drug)
+        intermediate2 = self.gene_expression_nn(molecular)
+        product = intermediate1 * intermediate2
+        return product.mean(axis=1).unsqueeze(1)
+
+
+class GNN_Interaction_Model(nn.Module):
+    """Model combining NNs for interaction prediction between drug and molecular features."""
+
+    def __init__(
+        self,
+        data,
+        nfeatures_product: int,
+        hidden_dims_gene_expression_nn: List[int],
+        dropout_gene_expression_nn: float,
+    ):
+        """
+        Initialize the Interaction_Model.
+
+        Args:
+            data: Dataset object containing information about features.
+            nfeatures_product (int): Dimensionality of the product features (Final output.)
+            hidden_dims_drug_nn (List[int]): List of integers representing the dimensions of hidden layers for drug NN.
+            hidden_dims_gene_expression_nn (List[int]): List of integers representing the dimensions of hidden layers
+                                                        for Gene NN.
+            droupout_gene_expression_nn (float): Dropout probability for gene expression NN.
+        """
+        super().__init__()
+
+        self.input_features_drug_nn = data.ndrug_features
+        self.input_features_gene_expression_nn = data.nmolecular_features
+        self.nfeatures_product = nfeatures_product
+        self.hidden_dims_gene_expression_nn = hidden_dims_gene_expression_nn
+        self.droupout_gene_expression_nn = dropout_gene_expression_nn
+
+        # Define neural networks
+        self.drug_gnn = Drug_GAT(
+            self.nfeatures_product,
+        )
+        self.gene_expression_nn = Model(
+            self.input_features_gene_expression_nn,
+            self.nfeatures_product,
+            hidden_dims=self.hidden_dims_gene_expression_nn,
+            dropout=self.droupout_gene_expression_nn,
+        )
+
+    def forward(self, drug: tuple, molecular: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the Interaction_Model.
+
+        Args:
+            drug (torch.Tensor): Torch geometric tensor containing drug features embedding and edge index.
+            molecular (torch.Tensor): Tensor containing molecular features.
+
+        Returns
+        -------
+            torch.Tensor: Tensor representing the interaction of drug and molecular features.
+        """
+        intermediate1 = self.drug_gnn(drug)
         intermediate2 = self.gene_expression_nn(molecular)
         product = intermediate1 * intermediate2
         return product.mean(axis=1).unsqueeze(1)
