@@ -44,7 +44,8 @@ dependencies = [
     "rich>=13.7.1",
     "wandb>=0.16.4",
     "torchmetrics>=1.3.2",
-    "tqdm>=4.65"
+    "tqdm>=4.65",
+    "torch-geometric>=2.5.2",
 ]
 
 [project.optional-dependencies]
