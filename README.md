@@ -40,3 +40,9 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 - [Chemistry Library](https://www-library.ch.cam.ac.uk/list-useful-databases)
 - [CTR-DB, an omnibus for patient-derived gene expression signatures correlated with cancer drug response](https://pubmed.ncbi.nlm.nih.gov/34570230/)
 - [CTR-DB, an omnibus for patient-derived gene expression signatures correlated with cancer drug response](https://academic.oup.com/nar/article/50/D1/D1164/6389514)
+- [Predicting cellular responses to complexperturbations in high-throughput screens](https://www.embopress.org/doi/epdf/10.15252/msb.202211517)
+- [scGen predicts single-cell perturbation responses](https://www.nature.com/articles/s41592-019-0494-8)
+
+### Data profiling
+
+- [TargetDB](https://github.com/sdecesco/targetDB)
