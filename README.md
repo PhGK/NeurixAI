@@ -39,7 +39,8 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 
 - [Chemistry Library](https://www-library.ch.cam.ac.uk/list-useful-databases)
 - [CTR-DB, an omnibus for patient-derived gene expression signatures correlated with cancer drug response](https://pubmed.ncbi.nlm.nih.gov/34570230/)
-- [CTR-DB, an omnibus for patient-derived gene expression signatures correlated with cancer drug response](https://academic.oup.com/nar/article/50/D1/D1164/6389514)
+- [CeDR Atlas: a knowledgebase of cellular drug response](https://academic.oup.com/nar/article/50/D1/D1164/6389514)
+- [CTD](https://www.cancer.gov/ccg/research/functional-genomics/ctd2/data-portal)
 - [RW Pan-Cancer](https://portal.gdc.cancer.gov) --> ~44400 cases (no cell lines!)
 
 ### Papers
