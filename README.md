@@ -46,6 +46,7 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 
 - [Predicting cellular responses to complexperturbations in high-throughput screens](https://www.embopress.org/doi/epdf/10.15252/msb.202211517)
 - [scGen predicts single-cell perturbation responses](https://www.nature.com/articles/s41592-019-0494-8)
+- [A novel approach for drug response prediction in cancer cell lines via network representation learning](https://academic.oup.com/bioinformatics/article/35/9/1527/5126231?login=false)
 
 ### Data profiling
 
