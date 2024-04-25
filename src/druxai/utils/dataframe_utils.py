@@ -1,0 +1,186 @@
+"""Module contains functions for creating DataFrame from computed variables."""
+
+from typing import List, Tuple
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+
+from druxai.utils.data import DrugResponseDataset
+from druxai.utils.set_seeds import set_seeds
+
+set_seeds()
+
+
+def split_data_by_cell_line_ids(
+    dataframe: pd.DataFrame, train_pct: float = 0.7, test_pct: float = 0.15, val_pct: float = 0.15, seed: int = 42
+) -> Tuple[List[int], List[int], List[int]]:
+    """
+    Split the DataFrame into train, test, and validation sets based.
+
+    It splits on cell line IDs ensuring that each cell line is only assigned to one set.
+
+    Args
+    ----------
+    dataframe (pd.DataFrame): Input DataFrame containing data to split.
+    train_pct (float): Percentage of data to allocate to the train set (default is 0.7).
+    test_pct (float): Percentage of data to allocate to the test set (default is 0.15).
+    val_pct (float): Percentage of data to allocate to the validation set (default is 0.15).
+    seed (int or None): Seed for random number generation (default is 42).
+
+    Returns
+    -------
+    Tuple[List[int], List[int], List[int]]: Tuple containing lists of IDs for the train, validation, and test sets.
+    """
+    # Set the seed for random number generation
+    rng = np.random.default_rng(seed)
+
+    # Step 1: Group by cell line
+    grouped = dataframe.groupby("cell_line")
+
+    # Step 2: Initialize sets to keep track of assigned cell line IDs
+    assigned_train, assigned_test, assigned_validation = set(), set(), set()
+
+    # Step 3: Split each group into train, test, and validation sets
+    train_dfs, test_dfs, validation_dfs = [], [], []
+    for _, group_df in grouped:
+        # Check if the cell line ID has been assigned before
+        cell_line_id = group_df["cell_line"].iloc[0]  # Assuming 'cell_line' is the first column
+        if (
+            cell_line_id not in assigned_train
+            and cell_line_id not in assigned_test
+            and cell_line_id not in assigned_validation
+        ):
+            # Assign the cell line ID to a set based on a random draw
+            draw = rng.random()
+            if draw < train_pct:  # train_pct chance for train set
+                assigned_train.add(cell_line_id)
+                train_dfs.append(group_df)
+            elif draw < train_pct + test_pct:  # test_pct chance for test set
+                assigned_test.add(cell_line_id)
+                test_dfs.append(group_df)
+            else:  # val_pct chance for validation set
+                assigned_validation.add(cell_line_id)
+                validation_dfs.append(group_df)
+
+    # Step 4: Concatenate the sets to create the final train, test, and validation DataFrames
+    train_ids = pd.concat(train_dfs).index.to_list()
+    val_ids = pd.concat(validation_dfs).index.to_list()
+    test_ids = pd.concat(test_dfs).index.to_list()
+
+    return train_ids, val_ids, test_ids
+
+
+def k_fold_split_data_by_cell_lines_ids(
+    df: pd.DataFrame, n_splits: int = 5, seed: int = 42
+) -> Tuple[List[List[int]], List[List[int]]]:
+    """
+    Perform K-fold cross-validation on a DataFrame.
+
+    It ensures that all instances of a particular cell line,
+    regardless of the drug, are in either the training set or the validation set, but not both.
+
+    Parameters
+    ----------
+    df (pd.DataFrame): The DataFrame to split, which must contain a 'cell_line' column.
+    n_splits (int): The number of folds for the cross-validation. Default is 5.
+    seed (int): The seed for the random number generator. Default is 42.
+
+    Returns
+    -------
+    Tuple[List[List[int]], List[List[int]]]: A tuple containing two lists of lists of integers.
+    The first list contains the indices of the training sets for each fold, and the second list contains
+    the indices of the validation sets for each fold.
+    """
+    # Step 1: Get unique cell lines
+    unique_cell_lines = df["cell_line"].unique()
+
+    # Step 2: Initialize the KFold object
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
+
+    # Step 3: Initialize lists to keep track of train and test sets
+    train_ids, test_ids = [], []
+
+    # Step 4: Perform K-fold cross-validation on the unique cell lines
+    for train_index, test_index in kf.split(unique_cell_lines):
+        train_cell_lines = unique_cell_lines[train_index]
+        test_cell_lines = unique_cell_lines[test_index]
+
+        # Get the indices of the instances of the cell lines in the train and test sets
+        train_ids.append(df[df["cell_line"].isin(train_cell_lines)].index.to_list())
+        test_ids.append(df[df["cell_line"].isin(test_cell_lines)].index.to_list())
+
+    return train_ids, test_ids
+
+
+def standardize_molecular_data_inplace(
+    data: DrugResponseDataset,
+    train_id: List,
+    test_id: List,
+    scaler_type: str = "StandardScaler",
+    cross_val: bool = False,
+    val_id: List = None,
+) -> None:
+    """
+    Standardizes molecular data in the dataset object in place based on provided train, validation, and test IDs.
+
+    Args:
+        data (DrugResponseDataset): Dataset object containing molecular data.
+        train_id (Any): IDs for training set.
+        test_id (Any): IDs for testing set.
+        scaler_type (str, optional): Type of scaler to use. Options: 'StandardScaler', 'MinMaxScaler', 'RobustScaler'.
+                                        Defaults to 'StandardScaler'.
+        cross_val (bool, optional): If True, skip validation set standardization. Defaults to False.
+        val_id (Any, optional): IDs for validation set. Required if cross_val is False. Defaults to None.
+    """
+    # Select scaler based on scaler_type
+    if scaler_type == "StandardScaler":
+        scaler = StandardScaler()
+    elif scaler_type == "MinMaxScaler":
+        scaler = MinMaxScaler()
+    elif scaler_type == "RobustScaler":
+        scaler = RobustScaler()
+    else:
+        raise ValueError("Invalid scaler_type. Choose from 'StandardScaler', 'MinMaxScaler', or 'RobustScaler'.")
+
+    # Standardize gene data
+    train_molecular_data = data.molecular_data.loc[data.targets.iloc[train_id]["cell_line"].unique()]
+    scaler.fit(train_molecular_data.values)
+    standardized_train_molecular_data = scaler.transform(train_molecular_data.values)
+
+    # Convert standardized arrays back to DataFrame
+    standardized_train_molecular_df = pd.DataFrame(
+        standardized_train_molecular_data, index=train_molecular_data.index, columns=train_molecular_data.columns
+    )
+
+    # Update molecular data in the dataset object with standardized DataFrames
+    data.molecular_data.loc[data.targets.iloc[train_id]["cell_line"].unique()] = standardized_train_molecular_df
+
+    if not cross_val:
+        if val_id is None:
+            raise ValueError("val_id is required when cross_val is False.")
+
+        # Apply the scaler to the validation set
+        val_molecular_data = data.molecular_data.loc[data.targets.iloc[val_id]["cell_line"].unique()]
+        standardized_val_molecular_data = scaler.transform(val_molecular_data.values)
+
+        # Convert standardized arrays back to DataFrame
+        standardized_val_molecular_df = pd.DataFrame(
+            standardized_val_molecular_data, index=val_molecular_data.index, columns=val_molecular_data.columns
+        )
+
+        # Update molecular data in the dataset object with standardized DataFrames
+        data.molecular_data.loc[data.targets.iloc[val_id]["cell_line"].unique()] = standardized_val_molecular_df
+
+    # Apply the scaler to the testing set
+    test_molecular_data = data.molecular_data.loc[data.targets.iloc[test_id]["cell_line"].unique()]
+    standardized_test_molecular_data = scaler.transform(test_molecular_data.values)
+
+    # Convert standardized arrays back to DataFrame
+    standardized_test_molecular_df = pd.DataFrame(
+        standardized_test_molecular_data, index=test_molecular_data.index, columns=test_molecular_data.columns
+    )
+
+    # Update molecular data in the dataset object with standardized DataFrames
+    data.molecular_data.loc[data.targets.iloc[test_id]["cell_line"].unique()] = standardized_test_molecular_df
