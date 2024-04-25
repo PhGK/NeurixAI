@@ -1,6 +1,6 @@
 # DruxAI 
 
-This markdown file summarizes the datasets used from [Depmap portal](https://depmap.org/portal/)
+Paper and Dataset collectiion for Drug and Cell Line treatment effect prediction. 
 
 ## Papers
 
@@ -14,7 +14,7 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 # Data
 The data was downloaded from: https://depmap.org/portal/download/custom/ 
 
-- Depmap (23Q4)
+- [Depmap](https://depmap.org/portal/) (23Q4)
 
    1. **OmicsSomaticMutationsMatrixHotspot.csv**: Genotyped matrix determining for each cell line whether each gene has at least one hot spot mutation. A variant is considered a hot spot if it's present in one of the following: Hess et al. 2019 paper, OncoKB hotspot, COSMIC mutation significance tier 1. (0 == no mutation; If there is one or more hot spot mutations in the same gene for the same cell line, the allele frequencies are summed, and if the sum is greater than 0.95, a value of 2 is assigned and if not, a value of 1 is assigned.)
    2. **OmicsExpressionProteinCodingGenesTPMLogp1.csv**: Gene expression TPM values of the protein coding genes for DepMap cell lines. These values are inferred from RNA-seq data using the RSEM tool and are reported after log2 transformation, using a pseudo-count of 1 (log2(TPM+1)). Additional RNA-seq-based expression measurements are available for download as part of the full DepMap Data Release. More information on the DepMap Omics processing pipeline is available at [DepMap Omics processing pipeline](https://github.com/broadinstitute/depmap_omics).
@@ -38,13 +38,13 @@ The data was downloaded from: https://depmap.org/portal/download/custom/
 - [CeDR Atlas: a knowledgebase of cellular drug response](https://academic.oup.com/nar/article/50/D1/D1164/6389514)
 - [CTD](https://www.cancer.gov/ccg/research/functional-genomics/ctd2/data-portal)
 
-### PRISM Explained
+# PRISM Explained
 
 - [Nature article on anticancer potential of non-oncology drugs by systematic viability profiling](https://www.nature.com/articles/s43018-019-0018-6)
 
 ![Bildschirmfoto 2024-02-26 um 18 35 21](https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/01f9278d-7701-46f9-a969-be1ede1bab5a)
 
-# Pharmacogenomic Landscape Interactions for GDSC1/2 Dataset
+## Pharmacogenomic Landscape Interactions for GDSC1/2 Dataset
 
 - [Cell article](https://www.sciencedirect.com/science/article/pii/S0092867416307462)
 - Integration of heterogeneous molecular data from 11,289 tumors and 1,001 cell lines
