@@ -11,9 +11,10 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 | A novel approach for drug response prediction in cancer cell lines via network representation learning | https://academic.oup.com/bioinformatics/article/35/9/1527/5126231?login=false |
 | PERCEPTION predicts patient response and resistance to treatment using single-cell transcriptomics of their tumors | https://www.nature.com/articles/s43018-024-00756-7 |
 
-# Data used for analysis
+# Data
+The data was downloaded from: https://depmap.org/portal/download/custom/ 
 
-- Depmap
+- Depmap (23Q4)
 
    1. **OmicsSomaticMutationsMatrixHotspot.csv**: Genotyped matrix determining for each cell line whether each gene has at least one hot spot mutation. A variant is considered a hot spot if it's present in one of the following: Hess et al. 2019 paper, OncoKB hotspot, COSMIC mutation significance tier 1. (0 == no mutation; If there is one or more hot spot mutations in the same gene for the same cell line, the allele frequencies are summed, and if the sum is greater than 0.95, a value of 2 is assigned and if not, a value of 1 is assigned.)
    2. **OmicsExpressionProteinCodingGenesTPMLogp1.csv**: Gene expression TPM values of the protein coding genes for DepMap cell lines. These values are inferred from RNA-seq data using the RSEM tool and are reported after log2 transformation, using a pseudo-count of 1 (log2(TPM+1)). Additional RNA-seq-based expression measurements are available for download as part of the full DepMap Data Release. More information on the DepMap Omics processing pipeline is available at [DepMap Omics processing pipeline](https://github.com/broadinstitute/depmap_omics).
@@ -28,9 +29,16 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
    4. **Repurposing_Public_23Q2_Extended_Primary_Compound_List.csv**: All drug names, targets and pathways.
    5. **secondary-screen-dose-response-curve-parameters.csv**: Parameters of dose-response curves fit to replicate-level viability data using a four-parameter log-logistic function.
  
-- GDSC
+- GDSC1
 
-### PRISM
+## Additional Data Resources
+
+- [Chemistry Library](https://www-library.ch.cam.ac.uk/list-useful-databases)
+- [CTR-DB, an omnibus for patient-derived gene expression signatures correlated with cancer drug response](https://pubmed.ncbi.nlm.nih.gov/34570230/)
+- [CeDR Atlas: a knowledgebase of cellular drug response](https://academic.oup.com/nar/article/50/D1/D1164/6389514)
+- [CTD](https://www.cancer.gov/ccg/research/functional-genomics/ctd2/data-portal)
+
+### PRISM Explained
 
 - [Nature article on anticancer potential of non-oncology drugs by systematic viability profiling](https://www.nature.com/articles/s43018-019-0018-6)
 
@@ -47,14 +55,6 @@ This markdown file summarizes the datasets used from [Depmap portal](https://dep
 <img width="576" alt="Bildschirmfoto 2024-03-05 um 08 16 37" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/4287677e-14ec-4557-90b4-670390d9e1f3">
 <img width="854" alt="Bildschirmfoto 2024-03-05 um 08 56 47" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/e71a14c2-ed31-4804-9daa-a957a5025734">
 <img width="743" alt="Bildschirmfoto 2024-03-05 um 09 13 44" src="https://github.com/NiklasKiermeyer/DruxAI/assets/44393665/e9d50d4a-d478-44a0-b943-8c01ce687586">
-
-### Additional Data Resources
-
-- [Chemistry Library](https://www-library.ch.cam.ac.uk/list-useful-databases)
-- [CTR-DB, an omnibus for patient-derived gene expression signatures correlated with cancer drug response](https://pubmed.ncbi.nlm.nih.gov/34570230/)
-- [CeDR Atlas: a knowledgebase of cellular drug response](https://academic.oup.com/nar/article/50/D1/D1164/6389514)
-- [CTD](https://www.cancer.gov/ccg/research/functional-genomics/ctd2/data-portal)
-- [RW Pan-Cancer](https://portal.gdc.cancer.gov) --> ~44400 cases (no cell lines!)
   
 
 ### Data profiling
